@@ -2,6 +2,7 @@
 import { supabase } from './supabase.js';
 import { loadLedger } from './ledger.js';
 import { APP_NAME } from './config.js';
+import { personPdf, overviewPdf } from './pdf.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const eur = c => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(c / 100);
@@ -19,7 +20,8 @@ const I = {
   x: ic('<path d="M6 6l12 12M18 6L6 18"/>'), back: ic('<path d="M15 5l-7 7 7 7"/>'),
   star: ic('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>'),
   plus: ic('<path d="M12 5v14M5 12h14"/>'), search: ic('<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/>'),
-  send: ic('<path d="M4 12l16-8-6 16-3-7z"/>'), check: ic('<path d="M5 12l5 5 9-10"/>'), book: ic('<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>'),
+  send: ic('<path d="M4 12l16-8-6 16-3-7z"/>'), check: ic('<path d="M5 12l5 5 9-10"/>'),
+  edit: ic('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'), pdf: ic('<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 14h6M10 17h6"/>'), book: ic('<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>'),
 };
 const TABS = [['contacts', 'Contatti', I.users], ['home', 'Home', I.home], ['consult', 'Consultazioni', I.list]];
 const METHODS = ['Contanti', 'Carta', 'Satispay', 'PayPal', 'Bonifico'];
@@ -45,7 +47,7 @@ function openItems(its) {
 
 export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const name = user.user_metadata?.name || user.email.split('@')[0];
-  let tab = 'home', data = null, failed = false, q = '', flt = 'all', pk = null, psub = 'due', form = null, tt;
+  let tab = 'home', data = null, failed = false, q = '', flt = 'all', pk = null, psub = 'due', form = null, tt, fx = null, armed = '';
 
   app.innerHTML = `<div class="shell" id="shell">
     <header class="top"><button class="badge" data-a="menu" aria-label="Menu">${esc(name[0].toUpperCase())}</button>
@@ -88,12 +90,12 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
         <h2>Spese recenti</h2>${data.recent.length ? `<div class="card">${data.recent.map(row).join('')}</div>` : '<p class="empty">Ancora nessuna spesa condivisa.</p>'}`,
     contacts: () => searchBar(`${'contacts' in navigator && 'ContactsManager' in window ? `<button class="btn sq" data-a="pick" aria-label="Dalla rubrica">${I.book}</button>` : ''}<button class="btn primary sq" data-a="addc" aria-label="Nuovo contatto">${I.plus}</button>`)
       + seg('flt', flt, [['all', 'Tutti'], ['tel', 'Telefono'], ['mail', 'Email']]) + `<div id="list">${listHTML()}</div>`,
-    consult: () => searchBar('') + `<div id="list">${listHTML()}</div>`,
+    consult: () => searchBar(`<button class="btn sq" data-a="opdf" aria-label="Riepilogo PDF">${I.pdf}</button>`) + `<div id="list">${listHTML()}</div>`,
   };
 
   const itemRow = ({ it, rem }, cn) => {
     const v = rem ?? it.v, e = it.kind === 'e';
-    return `<div class="row"><span class="ico">${e ? I.list : I.check}</span><span class="grow"><b>${e ? esc(it.title) : v > 0 ? 'Hai dato un saldo' : 'Hai ricevuto un saldo'}</b><br>
+    return `<div class="row ${it.own ? 'tap' : ''}" ${it.own ? `data-item="${it.kind}:${it.id}"` : ''}><span class="ico">${e ? I.list : I.check}</span><span class="grow"><b>${e ? esc(it.title) : v > 0 ? 'Hai dato un saldo' : 'Hai ricevuto un saldo'}</b><br>
       <span class="sub">${e ? `${it.iPaid ? 'Pagato da te' : 'Pagato da ' + esc(cn)} · ${eur(it.total)}` : esc(it.method || 'Saldo')} · ${dshort(it.date)}</span></span>${sg(v)}</div>`;
   };
   const personHTML = () => {
@@ -108,7 +110,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
         const h = k !== m ? `${m ? '</div>' : ''}<h2>${k}</h2><div class="card">` : ''; m = k; return h + itemRow({ it }, c.name);
       }).join('') + '</div>' : '<p class="empty">Nessuna spesa condivisa.</p>';
     }
-    return `<div class="ptop"><button class="back" data-a="back" aria-label="Indietro">${I.back}</button>${av(c.id, c.name)}<b>${esc(c.name)}</b></div>
+    return `<div class="ptop"><button class="back" data-a="back" aria-label="Indietro">${I.back}</button>${av(c.id, c.name)}<b class="grow">${esc(c.name)}</b><button class="back" data-a="pdf" aria-label="PDF">${I.pdf}</button><button class="back" data-a="editc" aria-label="Modifica contatto">${I.edit}</button></div>
       <section class="hero p"><span>${b > 0 ? 'Ti deve' : b < 0 ? 'Devi dare' : 'Siete in pari'}</span><strong>${eur(Math.abs(b))}</strong></section>
       <div class="acts"><button class="btn primary" data-a="newx">${I.plus}Nuova spesa</button>${b ? `<button class="btn" data-a="settle">${I.check}Salda</button>` : ''}${b > 0 ? `<button class="btn" data-a="remind">${I.send}Sollecita</button>` : ''}</div>
       ${seg('psub', psub, [['due', 'Da saldare'], ['hist', 'Storico']])}${body}`;
@@ -117,23 +119,31 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const drawer = () => { const t = getTheme(); return `<button class="x" data-a="close" aria-label="Chiudi">${I.x}</button>
     <div class="avatar big">${esc(name[0].toUpperCase())}</div><h2 class="nm">${esc(name)}</h2><p class="sub">${esc(user.email)}</p>
     <h3>Aspetto</h3>${seg('theme-set', t, [['system', 'Sistema'], ['light', 'Chiaro'], ['dark', 'Scuro']])}
-    <button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · fase 3</p>`; };
+    <button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · fase 4</p>`; };
   const sheet = () => `<div class="grab"></div><div class="sheet-h"><h2>Notifiche</h2>${data?.notifs.some(n => !n.read_at) ? '<button class="link" data-a="readall">Segna come lette</button>' : ''}</div>
     ${data?.notifs.length ? data.notifs.map(n => `<div class="row"><span class="grow"><b>${esc(n.title)}</b>${n.body ? `<br><span class="sub">${esc(n.body)}</span>` : ''}</span>${n.read_at ? '' : '<span class="dot s"></span>'}</div>`).join('') : '<p class="empty">Nessuna notifica.</p>'}`;
 
   const formHTML = () => {
     const f = (t, body, btn) => `<div class="grab"></div><form data-f="${form}"><h2>${t}</h2>${body}<p class="msg" id="fmsg"></p><button class="btn primary">${btn}</button></form>`, cn = esc(cname(pk));
     if (form === 'contact') return f('Nuovo contatto', '<input name="name" placeholder="Nome" required maxlength="60"><input name="email" type="email" placeholder="Email (facoltativa)"><input name="phone" type="tel" placeholder="Telefono (facoltativo)">', 'Aggiungi');
-    if (form === 'expense') return f('Nuova spesa', `<input name="title" placeholder="Descrizione" required maxlength="80">
-      <div class="two"><input name="amount" inputmode="decimal" placeholder="Importo" required><input name="date" type="date" value="${today()}" required></div>
-      <label>Pagato da${chips('paid', [['me', 'Io'], ['them', cname(pk)]], 'me')}</label>
-      <label>Da restituire${chips('split', [['half', 'Metà'], ['all', 'Tutto'], ['custom', 'Altro importo']], 'half')}</label>
-      <label id="cust" hidden>Importo da restituire<input name="custom" inputmode="decimal" placeholder="0,00"></label>`, 'Salva spesa');
+    if (form === 'editc') { const c = C().find(x => x.id === pk);
+      return f('Modifica contatto', `<input name="name" value="${esc(c.name)}" required maxlength="60"><input name="email" type="email" placeholder="Email" value="${esc(c.email || '')}"><input name="phone" type="tel" placeholder="Telefono" value="${esc(c.phone || '')}">`, 'Salva')
+        + '<button class="btn danger-t del" data-a="delc">Elimina contatto</button>'; }
+    if (form === 'dels') return `<div class="grab"></div><div class="dform"><h2>Saldo del ${dshort(fx.date)}</h2><p class="sub">${esc(fx.method || 'Saldo')} · ${eur(Math.abs(fx.v))}</p><button class="btn danger-t" data-a="delx">Elimina saldo</button></div>`;
+    if (form === 'expense' || form === 'editx') {
+      const x = form === 'editx' ? fx : null, back = x ? Math.abs(x.v) : 0, sp = !x ? 'half' : back === Math.round(x.total / 2) ? 'half' : back === x.total ? 'all' : 'custom';
+      return f(x ? 'Modifica spesa' : 'Nuova spesa', `<input name="title" placeholder="Descrizione" required maxlength="80" value="${esc(x?.title || '')}">
+      <div class="two"><input name="amount" inputmode="decimal" placeholder="Importo" required value="${x ? (x.total / 100).toFixed(2).replace('.', ',') : ''}"><input name="date" type="date" value="${x?.date || today()}" required></div>
+      <label>Pagato da${chips('paid', [['me', 'Io'], ['them', cname(pk)]], x && !x.iPaid ? 'them' : 'me')}</label>
+      <label>Da restituire${chips('split', [['half', 'Metà'], ['all', 'Tutto'], ['custom', 'Altro importo']], sp)}</label>
+      <label id="cust" ${sp === 'custom' ? '' : 'hidden'}>Importo da restituire<input name="custom" inputmode="decimal" placeholder="0,00" value="${sp === 'custom' ? (back / 100).toFixed(2).replace('.', ',') : ''}"></label>`, x ? 'Salva modifiche' : 'Salva spesa')
+        + (x ? '<button class="btn danger-t del" data-a="delx">Elimina spesa</button>' : '');
+    }
     const b = bal(pk);
     return f(`Salda con ${cn}`, `<p class="sub">${b > 0 ? `Ti deve ${eur(b)}` : `Devi dare ${eur(-b)}`}</p><input name="amount" inputmode="decimal" value="${(Math.abs(b) / 100).toFixed(2).replace('.', ',')}" required>
       <label>Metodo${chips('method', METHODS.map(m => [m, m]), 'Contanti')}</label>`, 'Segna come saldato');
   };
-  const openForm = t => { form = t; $('#fsheet').innerHTML = formHTML(); shell.classList.remove('menu', 'notif'); shell.classList.add('form'); };
+  const openForm = t => { form = t; armed = ''; $('#fsheet').innerHTML = formHTML(); shell.classList.remove('menu', 'notif'); shell.classList.add('form'); };
 
   const paint = () => {
     $('#page').innerHTML = pages[tab]();
@@ -145,19 +155,30 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const reload = async () => { try { data = await loadLedger(user.id); failed = false; } catch { failed = true; } paint(); };
 
   app.onclick = async e => {
-    const t = e.target.closest('[data-a],[data-tab],[data-theme-set],[data-person],[data-flt],[data-psub]'), d = t?.dataset;
+    const t = e.target.closest('[data-a],[data-tab],[data-theme-set],[data-person],[data-flt],[data-psub],[data-item]'), d = t?.dataset;
     if (!t) return;
     if (d.tab) { tab = d.tab; q = ''; flt = 'all'; paint(); scrollTo(0, 0); }
     else if (d.themeSet) { applyTheme(d.themeSet); paint(); }
     else if (d.person) { pk = d.person; psub = 'due'; paint(); }
     else if (d.flt) { flt = d.flt; paint(); }
     else if (d.psub) { psub = d.psub; paint(); }
+    else if (d.item) { const [k, id] = d.item.split(':'); fx = (data.items[pk] || []).find(i => i.kind === k && i.id === id); openForm(k === 'e' ? 'editx' : 'dels'); }
     else if (d.a === 'menu') { shell.classList.remove('notif'); shell.classList.add('menu'); }
     else if (d.a === 'notif') { shell.classList.remove('menu'); shell.classList.add('notif'); }
     else if (d.a === 'close') shell.classList.remove('menu', 'notif', 'form');
     else if (d.a === 'back') { pk = null; paint(); }
     else if (d.a === 'out') logout();
     else if (d.a === 'addc') openForm('contact');
+    else if (d.a === 'editc') openForm('editc');
+    else if (d.a === 'pdf') personPdf(C().find(x => x.id === pk), data.items[pk] || [], bal(pk)).catch(() => toast('PDF non disponibile.'));
+    else if (d.a === 'opdf') overviewPdf(C().filter(c => (data.items[c.id] || []).length).map(c => ({ name: c.name, bal: bal(c.id) }))).catch(() => toast('PDF non disponibile.'));
+    else if (d.a === 'delx' || d.a === 'delc') {
+      if (armed !== d.a) { armed = d.a; t.textContent = 'Tocca ancora per confermare'; return; }
+      const { error } = d.a === 'delc' ? await supabase.from('contacts').delete().eq('id', pk)
+        : await supabase.from(fx.kind === 'e' ? 'expenses' : 'settlements').delete().eq('id', fx.id);
+      if (error) return toast(d.a === 'delc' ? 'Il contatto ha spese collegate: eliminale prima.' : 'Impossibile eliminare.');
+      shell.classList.remove('form'); if (d.a === 'delc') pk = null; await reload(); toast('Eliminato');
+    }
     else if (d.a === 'newx') openForm('expense');
     else if (d.a === 'settle') openForm('settle');
     else if (d.a === 'readall') {
@@ -186,14 +207,22 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     try {
       if (k === 'contact') {
         const { error } = await supabase.from('contacts').insert({ name: f.name.trim(), email: f.email.trim() || null, phone: f.phone.trim() || null }); if (error) throw error;
-      } else if (k === 'expense') {
+      } else if (k === 'editc') {
+        const { error } = await supabase.from('contacts').update({ name: f.name.trim(), email: f.email.trim() || null, phone: f.phone.trim() || null }).eq('id', pk); if (error) throw error;
+      } else if (k === 'expense' || k === 'editx') {
         const amt = cents(f.amount), mine = f.paid === 'me', back = f.split === 'half' ? Math.round(amt / 2) : f.split === 'all' ? amt : cents(f.custom);
         if (!(amt > 0)) throw new Error('Importo non valido.');
         if (!(back >= 0 && back <= amt)) throw new Error('L’importo da restituire non può superare il totale.');
-        const { data: x, error } = await supabase.from('expenses').insert({ title: f.title.trim(), amount_cents: amt, spent_on: f.date, payer_contact_id: mine ? null : pk }).select('id').single(); if (error) throw error;
+        const row = { title: f.title.trim(), amount_cents: amt, spent_on: f.date, payer_contact_id: mine ? null : pk };
+        let xid;
+        if (k === 'editx') {
+          xid = fx.id;
+          const u = await supabase.from('expenses').update(row).eq('id', xid); if (u.error) throw u.error;
+          const dl = await supabase.from('expense_shares').delete().eq('expense_id', xid); if (dl.error) throw dl.error;
+        } else { const { data: x, error } = await supabase.from('expenses').insert(row).select('id').single(); if (error) throw error; xid = x.id; }
         const sh = mine ? [{ contact_id: pk, amount_cents: back }, { contact_id: null, amount_cents: amt - back }] : [{ contact_id: null, amount_cents: back }, { contact_id: pk, amount_cents: amt - back }];
-        const r = await supabase.from('expense_shares').insert(sh.map(s => ({ ...s, expense_id: x.id })));
-        if (r.error) { await supabase.from('expenses').delete().eq('id', x.id); throw r.error; }
+        const r = await supabase.from('expense_shares').insert(sh.map(s => ({ ...s, expense_id: xid })));
+        if (r.error) { if (k !== 'editx') await supabase.from('expenses').delete().eq('id', xid); throw r.error; }
       } else {
         const amt = cents(f.amount); if (!(amt > 0)) throw new Error('Importo non valido.');
         const { error } = await supabase.from('settlements').insert({ contact_id: pk, direction: bal(pk) > 0 ? 'received' : 'paid', amount_cents: amt, method: f.method }); if (error) throw error;

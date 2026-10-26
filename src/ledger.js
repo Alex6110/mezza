@@ -25,7 +25,7 @@ export async function loadLedger(me) {
     const iPaid = own ? x.payer_contact_id == null : toMe.has(x.payer_contact_id);
     const payerKey = own ? x.payer_contact_id : (x.payer_contact_id == null ? keyOf(x.created_by) : null);
     let d = 0;
-    const ex = { kind: 'e', id: x.id, title: x.title, date: x.spent_on, ts: x.created_at, total: x.amount_cents, iPaid };
+    const ex = { kind: 'e', id: x.id, title: x.title, date: x.spent_on, ts: x.created_at, total: x.amount_cents, iPaid, own };
     for (const sh of x.expense_shares) {
       const mineShare = own ? sh.contact_id == null : toMe.has(sh.contact_id);
       const otherShare = own ? sh.contact_id != null : sh.contact_id == null;
@@ -38,7 +38,7 @@ export async function loadLedger(me) {
     if (t.status !== 'confirmed') continue;
     const own = t.created_by === me;
     const iGave = own ? t.direction === 'paid' : t.direction === 'received';
-    add(own ? t.contact_id : keyOf(t.created_by), iGave ? t.amount_cents : -t.amount_cents, { kind: 's', id: t.id, method: t.method, date: t.settled_on, ts: t.created_at });
+    add(own ? t.contact_id : keyOf(t.created_by), iGave ? t.amount_cents : -t.amount_cents, { kind: 's', id: t.id, own, method: t.method, date: t.settled_on, ts: t.created_at });
   }
   const v = Object.values(bal);
   return {

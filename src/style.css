@@ -111,3 +111,8 @@ h2 { font-size: .95rem; color: var(--muted); font-weight: 600; margin: 26px 4px 
 .shell.form #sheet, .shell:not(.form) #fsheet { visibility: hidden; }
 .toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 96px); transform: translate(-50%, 20px); z-index: 12; padding: 11px 18px; border-radius: 99px; background: var(--text); color: var(--bg); font-size: .9rem; opacity: 0; pointer-events: none; transition: .25s; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ===== Fase 4: modifica, eliminazione, PDF ===== */
+.ptop .grow { flex: 1; min-width: 0; }
+.del { margin: 4px 14px 14px; width: calc(100% - 28px); }
+.dform { padding: 6px 14px 16px; display: grid; gap: 10px; }
