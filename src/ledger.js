@@ -4,7 +4,7 @@ import { supabase } from './supabase.js';
 
 export async function loadLedger(me) {
   const [c, e, s, n] = await Promise.all([
-    supabase.from('contacts').select('id,owner_id,name,linked_user_id'),
+    supabase.from('contacts').select('id,owner_id,name,email,phone,favorite,linked_user_id'),
     supabase.from('expenses')
       .select('id,title,amount_cents,spent_on,created_by,payer_contact_id,created_at,expense_shares(contact_id,amount_cents)')
       .order('spent_on', { ascending: false }).order('created_at', { ascending: false }),
