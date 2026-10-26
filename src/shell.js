@@ -85,7 +85,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     ${x.delta ? `<b class="${x.delta > 0 ? 'pos' : 'neg'}">${x.delta > 0 ? '+' : '−'}${eur(Math.abs(x.delta))}</b>` : '<span class="sub">Non coinvolto</span>'}</div>`;
   const pages = {
     home: () => failed ? '<p class="empty">Impossibile caricare i dati. Controlla di aver eseguito gli script SQL.</p>' : !data ? '<p class="empty">Caricamento…</p>'
-      : `<section class="hero"><div><span>Ti devono</span><strong>${eur(data.owed)}</strong></div><div><span>Devi dare</span><strong>${eur(data.owe)}</strong></div>
+      : `${invitesHTML()}<section class="hero"><div><span>Ti devono</span><strong>${eur(data.owed)}</strong></div><div><span>Devi dare</span><strong>${eur(data.owe)}</strong></div>
         <p class="net">Saldo netto <b>${data.owed - data.owe < 0 ? '−' : ''}${eur(Math.abs(data.owed - data.owe))}</b></p></section>
         <h2>Spese recenti</h2>${data.recent.length ? `<div class="card">${data.recent.map(row).join('')}</div>` : '<p class="empty">Ancora nessuna spesa condivisa.</p>'}`,
     contacts: () => searchBar(`${'contacts' in navigator && 'ContactsManager' in window ? `<button class="btn sq" data-a="pick" aria-label="Dalla rubrica">${I.book}</button>` : ''}<button class="btn primary sq" data-a="addc" aria-label="Nuovo contatto">${I.plus}</button>`)
@@ -93,6 +93,14 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     consult: () => searchBar(`<button class="btn sq" data-a="opdf" aria-label="Riepilogo PDF">${I.pdf}</button>`) + `<div id="list">${listHTML()}</div>`,
   };
 
+  const invitesHTML = () => (data?.invites || []).map(i => `<div class="card inv"><div class="row"><span class="ico">${I.users}</span><span class="grow"><b>${esc(i.from_name || i.from_email)}</b><br><span class="sub">ti invita a condividere i conti</span></span></div>
+    <div class="acts pad"><button class="btn primary" data-a="inv-y" data-id="${i.id}">Accetta</button><button class="btn" data-a="inv-n" data-id="${i.id}">Rifiuta</button></div></div>`).join('');
+  const linkHTML = c => c.linked_user_id ? `<p class="chipinfo">${I.check}Collegato: vedete le stesse spese</p>`
+    : data.sent.has(c.id) ? `<p class="chipinfo">${I.send}Invito inviato. Compare quando ${esc(c.name.split(' ')[0])} accede con ${esc(c.email || 'la sua email')}.</p>`
+    : `<button class="btn link-b" data-a="${c.email ? 'invite' : 'editc'}">${I.users}${c.email ? 'Invita su Mezza' : 'Aggiungi l’email per invitare'}</button>`;
+  const pendHTML = () => data.pend.filter(p => p.key === pk).map(p => p.own ? `<p class="chipinfo">Saldo di ${eur(p.amount)} in attesa di conferma.</p>`
+    : `<div class="card inv"><div class="row"><span class="grow"><b>Saldo da confermare</b><br><span class="sub">${p.dir === 'paid' ? 'Dice di averti dato' : 'Dice di aver ricevuto da te'} ${eur(p.amount)}</span></span></div>
+      <div class="acts pad"><button class="btn primary" data-a="set-y" data-id="${p.id}">Conferma</button><button class="btn" data-a="set-n" data-id="${p.id}">Rifiuta</button></div></div>`).join('');
   const itemRow = ({ it, rem }, cn) => {
     const v = rem ?? it.v, e = it.kind === 'e';
     return `<div class="row ${it.own ? 'tap' : ''}" ${it.own ? `data-item="${it.kind}:${it.id}"` : ''}><span class="ico">${e ? I.list : I.check}</span><span class="grow"><b>${e ? esc(it.title) : v > 0 ? 'Hai dato un saldo' : 'Hai ricevuto un saldo'}</b><br>
@@ -112,14 +120,14 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     }
     return `<div class="ptop"><button class="back" data-a="back" aria-label="Indietro">${I.back}</button>${av(c.id, c.name)}<b class="grow">${esc(c.name)}</b><button class="back" data-a="pdf" aria-label="PDF">${I.pdf}</button><button class="back" data-a="editc" aria-label="Modifica contatto">${I.edit}</button></div>
       <section class="hero p"><span>${b > 0 ? 'Ti deve' : b < 0 ? 'Devi dare' : 'Siete in pari'}</span><strong>${eur(Math.abs(b))}</strong></section>
-      <div class="acts"><button class="btn primary" data-a="newx">${I.plus}Nuova spesa</button>${b ? `<button class="btn" data-a="settle">${I.check}Salda</button>` : ''}${b > 0 ? `<button class="btn" data-a="remind">${I.send}Sollecita</button>` : ''}</div>
+      ${linkHTML(c)}${pendHTML()}<div class="acts"><button class="btn primary" data-a="newx">${I.plus}Nuova spesa</button>${b ? `<button class="btn" data-a="settle">${I.check}Salda</button>` : ''}${b > 0 ? `<button class="btn" data-a="remind">${I.send}Sollecita</button>` : ''}</div>
       ${seg('psub', psub, [['due', 'Da saldare'], ['hist', 'Storico']])}${body}`;
   };
 
   const drawer = () => { const t = getTheme(); return `<button class="x" data-a="close" aria-label="Chiudi">${I.x}</button>
     <div class="avatar big">${esc(name[0].toUpperCase())}</div><h2 class="nm">${esc(name)}</h2><p class="sub">${esc(user.email)}</p>
     <h3>Aspetto</h3>${seg('theme-set', t, [['system', 'Sistema'], ['light', 'Chiaro'], ['dark', 'Scuro']])}
-    <button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · fase 4</p>`; };
+    <button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · fase 5</p>`; };
   const sheet = () => `<div class="grab"></div><div class="sheet-h"><h2>Notifiche</h2>${data?.notifs.some(n => !n.read_at) ? '<button class="link" data-a="readall">Segna come lette</button>' : ''}</div>
     ${data?.notifs.length ? data.notifs.map(n => `<div class="row"><span class="grow"><b>${esc(n.title)}</b>${n.body ? `<br><span class="sub">${esc(n.body)}</span>` : ''}</span>${n.read_at ? '' : '<span class="dot s"></span>'}</div>`).join('') : '<p class="empty">Nessuna notifica.</p>'}`;
 
@@ -172,7 +180,21 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     else if (d.a === 'editc') openForm('editc');
     else if (d.a === 'pdf') personPdf(C().find(x => x.id === pk), data.items[pk] || [], bal(pk)).catch(() => toast('PDF non disponibile.'));
     else if (d.a === 'opdf') overviewPdf(C().filter(c => (data.items[c.id] || []).length).map(c => ({ name: c.name, bal: bal(c.id) }))).catch(() => toast('PDF non disponibile.'));
-    else if (d.a === 'delx' || d.a === 'delc') {
+    else if (d.a === 'inv-y' || d.a === 'inv-n') {
+      const { error } = await supabase.rpc('respond_link', { req: d.id, accept: d.a === 'inv-y' });
+      error ? toast('Invito non valido.') : (toast(d.a === 'inv-y' ? 'Ora condividete i conti' : 'Invito rifiutato'), reload());
+    } else if (d.a === 'set-y' || d.a === 'set-n') {
+      const { error } = await supabase.rpc('confirm_settlement', { sid: d.id, accept: d.a === 'set-y' });
+      error ? toast('Impossibile aggiornare il saldo.') : (toast(d.a === 'set-y' ? 'Saldo confermato' : 'Saldo rifiutato'), reload());
+    } else if (d.a === 'invite') {
+      const c = C().find(x => x.id === pk);
+      if (norm(c.email) === norm(user.email)) return toast('Questa è la tua stessa email.');
+      const { error } = await supabase.from('link_requests').insert({ contact_id: pk, to_email: c.email.trim().toLowerCase() });
+      if (error) return toast(error.code === '23505' ? 'Invito già inviato.' : 'Impossibile inviare l’invito.');
+      const text = `${name} ti invita su Mezza per dividere le spese: ${location.origin}\nRegistrati o accedi con ${c.email} e accetta l’invito.`;
+      if (navigator.share) navigator.share({ text }).catch(() => {}); else { await navigator.clipboard.writeText(text); toast('Invito creato: messaggio copiato'); }
+      reload();
+    } else if (d.a === 'delx' || d.a === 'delc') {
       if (armed !== d.a) { armed = d.a; t.textContent = 'Tocca ancora per confermare'; return; }
       const { error } = d.a === 'delc' ? await supabase.from('contacts').delete().eq('id', pk)
         : await supabase.from(fx.kind === 'e' ? 'expenses' : 'settlements').delete().eq('id', fx.id);
@@ -213,16 +235,9 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
         const amt = cents(f.amount), mine = f.paid === 'me', back = f.split === 'half' ? Math.round(amt / 2) : f.split === 'all' ? amt : cents(f.custom);
         if (!(amt > 0)) throw new Error('Importo non valido.');
         if (!(back >= 0 && back <= amt)) throw new Error('L’importo da restituire non può superare il totale.');
-        const row = { title: f.title.trim(), amount_cents: amt, spent_on: f.date, payer_contact_id: mine ? null : pk };
-        let xid;
-        if (k === 'editx') {
-          xid = fx.id;
-          const u = await supabase.from('expenses').update(row).eq('id', xid); if (u.error) throw u.error;
-          const dl = await supabase.from('expense_shares').delete().eq('expense_id', xid); if (dl.error) throw dl.error;
-        } else { const { data: x, error } = await supabase.from('expenses').insert(row).select('id').single(); if (error) throw error; xid = x.id; }
         const sh = mine ? [{ contact_id: pk, amount_cents: back }, { contact_id: null, amount_cents: amt - back }] : [{ contact_id: null, amount_cents: back }, { contact_id: pk, amount_cents: amt - back }];
-        const r = await supabase.from('expense_shares').insert(sh.map(s => ({ ...s, expense_id: xid })));
-        if (r.error) { if (k !== 'editx') await supabase.from('expenses').delete().eq('id', xid); throw r.error; }
+        const { error } = await supabase.rpc('save_expense', { p_id: k === 'editx' ? fx.id : null, p_title: f.title.trim(), p_amount: amt, p_date: f.date, p_payer: mine ? null : pk, p_shares: sh });
+        if (error) throw error;
       } else {
         const amt = cents(f.amount); if (!(amt > 0)) throw new Error('Importo non valido.');
         const { error } = await supabase.from('settlements').insert({ contact_id: pk, direction: bal(pk) > 0 ? 'received' : 'paid', amount_cents: amt, method: f.method }); if (error) throw error;
@@ -232,5 +247,6 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     finally { btn.disabled = false; }
   };
 
+  document.onvisibilitychange = () => { if (document.visibilityState === 'visible') reload(); };
   paint(); reload();
 }
