@@ -1,6 +1,7 @@
 import './style.css';
 import { supabase } from './supabase.js';
 import { APP_NAME } from './config.js';
+import { mountShell } from './shell.js';
 
 const app = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -61,7 +62,11 @@ function homeView() {
     <button class="btn" data-logout>Esci</button></div>`;
 }
 
-const render = () => { app.innerHTML = `<div class="wrap"><section class="panel">${user && mode !== 'recovery' ? homeView() : authView()}</section></div>`; };
+const render = () => {
+  if (user && mode !== 'recovery') return mountShell(app, user, { applyTheme, getTheme, logout: () => supabase.auth.signOut() });
+  app.onclick = null;
+  app.innerHTML = `<div class="wrap"><section class="panel">${authView()}</section></div>`;
+};
 
 // ---------- Eventi ----------
 document.addEventListener('click', async e => {
@@ -100,7 +105,10 @@ document.addEventListener('submit', async e => {
 
 supabase.auth.onAuthStateChange((event, session) => {
   if (event === 'PASSWORD_RECOVERY') mode = 'recovery';
+  else if (mode !== 'recovery' && session?.user?.id === user?.id) { user = session?.user ?? null; return; } // rinnovo token: niente ridisegno
   user = session?.user ?? null;
   render();
 });
 render();
+
+if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('/sw.js');
