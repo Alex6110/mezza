@@ -108,7 +108,6 @@ h2 { font-size: .95rem; color: var(--muted); font-weight: 600; margin: 26px 4px 
 .sheet form { padding: 4px 14px 8px; } .sheet h2 { margin: 12px 0 4px; color: var(--text); font-size: 1.15rem; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .shell.form #fsheet { transform: none; } .shell.form .scrim { opacity: 1; pointer-events: auto; }
-.shell.form #sheet, .shell:not(.form) #fsheet { visibility: hidden; }
 .toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 96px); transform: translate(-50%, 20px); z-index: 12; padding: 11px 18px; border-radius: 99px; background: var(--text); color: var(--bg); font-size: .9rem; opacity: 0; pointer-events: none; transition: .25s; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
@@ -122,3 +121,15 @@ h2 { font-size: .95rem; color: var(--muted); font-weight: 600; margin: 26px 4px 
 .chipinfo { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: .88rem; margin: 12px 4px 0; }
 .chipinfo .i { width: 18px; height: 18px; color: var(--pos); flex: none; }
 .link-b { width: 100%; margin-top: 12px; }
+
+/* ===== Fase 5.1: animazioni e gesti ===== */
+.sheet, .drawer { visibility: hidden; transition: transform .34s cubic-bezier(.2,.8,.2,1), visibility 0s linear .34s; touch-action: pan-y; overscroll-behavior: contain; }
+.sheet { overflow-y: auto; max-height: 85dvh; }
+.shell.notif #sheet, .shell.form #fsheet, .shell.menu .drawer { visibility: visible; transition: transform .34s cubic-bezier(.2,.8,.2,1), visibility 0s; }
+.page { touch-action: pan-y; overscroll-behavior: contain; }
+.grab { height: 5px; margin: 8px auto 6px; }
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } }
+.rise > * { animation: rise .38s cubic-bezier(.2,.8,.2,1) both; } .rise > *:nth-child(2) { animation-delay: .04s; } .rise > *:nth-child(3) { animation-delay: .08s; } .rise > *:nth-child(n+4) { animation-delay: .12s; }
+.btn, .row.tap, .chip, .dock button, .bell, .badge, .back, .fav { transition: transform .15s, background .2s, color .2s; }
+.btn:active, .row.tap:active, .chip:active, .dock button:active, .bell:active, .badge:active, .back:active, .fav:active { transform: scale(.96); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition-duration: .01ms !important; } }

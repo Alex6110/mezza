@@ -45,9 +45,24 @@ function openItems(its) {
   return o;
 }
 
+// Chiusura con gesto: trascina il pannello verso il bordo (dir: 'down' | 'left' | 'right').
+const swipe = (el, dir, close) => {
+  let x0, y0, d = 0, on = false;
+  el.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; d = 0; on = false; }, { passive: true });
+  el.addEventListener('touchmove', e => {
+    const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0;
+    const v = dir === 'down' ? dy : dir === 'left' ? -dx : dx, side = dir === 'down' ? Math.abs(dx) : Math.abs(dy);
+    if (!on) { if (v > 8 && v > side && (dir !== 'down' || el.scrollTop <= 0)) { on = true; el.style.transition = 'none'; } else return; }
+    e.preventDefault(); d = Math.max(0, v);
+    el.style.transform = dir === 'down' ? `translateY(${d}px)` : `translateX(${dir === 'left' ? -d : d}px)`;
+  }, { passive: false });
+  const end = () => { if (!on) return; on = false; el.style.transition = ''; el.style.transform = ''; if (d > 90) close(); };
+  el.addEventListener('touchend', end); el.addEventListener('touchcancel', end);
+};
+
 export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const name = user.user_metadata?.name || user.email.split('@')[0];
-  let tab = 'home', data = null, failed = false, q = '', flt = 'all', pk = null, psub = 'due', form = null, tt, fx = null, armed = '';
+  let tab = 'home', data = null, failed = false, q = '', flt = 'all', pk = null, psub = 'due', form = null, tt, fx = null, armed = '', busy = false;
 
   app.innerHTML = `<div class="shell" id="shell">
     <header class="top"><button class="badge" data-a="menu" aria-label="Menu">${esc(name[0].toUpperCase())}</button>
@@ -59,6 +74,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const $ = s => app.querySelector(s), shell = $('#shell');
   const toast = t => { const e = $('#toast'); e.textContent = t; e.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => e.classList.remove('show'), 2600); };
   const C = () => data?.contacts || [], bal = id => data?.bal[id] || 0, cname = id => C().find(c => c.id === id)?.name || '?';
+  const eff = id => bal(id) + (data?.pend || []).filter(p => p.key === id).reduce((s, p) => s + p.v, 0);   // saldo al netto dei saldi in attesa
   const match = c => norm(c.name).includes(norm(q));
 
   const contactRow = c => `<div class="row tap" data-person="${c.id}">${av(c.id, c.name)}<span class="grow"><b>${esc(c.name)}</b><br><span class="sub">${esc(c.phone || c.email || 'Nessun recapito')}</span></span>
@@ -120,16 +136,16 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     }
     return `<div class="ptop"><button class="back" data-a="back" aria-label="Indietro">${I.back}</button>${av(c.id, c.name)}<b class="grow">${esc(c.name)}</b><button class="back" data-a="pdf" aria-label="PDF">${I.pdf}</button><button class="back" data-a="editc" aria-label="Modifica contatto">${I.edit}</button></div>
       <section class="hero p"><span>${b > 0 ? 'Ti deve' : b < 0 ? 'Devi dare' : 'Siete in pari'}</span><strong>${eur(Math.abs(b))}</strong></section>
-      ${linkHTML(c)}${pendHTML()}<div class="acts"><button class="btn primary" data-a="newx">${I.plus}Nuova spesa</button>${b ? `<button class="btn" data-a="settle">${I.check}Salda</button>` : ''}${b > 0 ? `<button class="btn" data-a="remind">${I.send}Sollecita</button>` : ''}</div>
+      ${linkHTML(c)}${pendHTML()}<div class="acts"><button class="btn primary" data-a="newx">${I.plus}Nuova spesa</button>${eff(pk) ? `<button class="btn" data-a="settle">${I.check}Salda</button>` : ''}${b > 0 ? `<button class="btn" data-a="remind">${I.send}Sollecita</button>` : ''}</div>
       ${seg('psub', psub, [['due', 'Da saldare'], ['hist', 'Storico']])}${body}`;
   };
 
   const drawer = () => { const t = getTheme(); return `<button class="x" data-a="close" aria-label="Chiudi">${I.x}</button>
     <div class="avatar big">${esc(name[0].toUpperCase())}</div><h2 class="nm">${esc(name)}</h2><p class="sub">${esc(user.email)}</p>
     <h3>Aspetto</h3>${seg('theme-set', t, [['system', 'Sistema'], ['light', 'Chiaro'], ['dark', 'Scuro']])}
-    <button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · fase 5</p>`; };
+    <button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · fase 5.1</p>`; };
   const sheet = () => `<div class="grab"></div><div class="sheet-h"><h2>Notifiche</h2>${data?.notifs.some(n => !n.read_at) ? '<button class="link" data-a="readall">Segna come lette</button>' : ''}</div>
-    ${data?.notifs.length ? data.notifs.map(n => `<div class="row"><span class="grow"><b>${esc(n.title)}</b>${n.body ? `<br><span class="sub">${esc(n.body)}</span>` : ''}</span>${n.read_at ? '' : '<span class="dot s"></span>'}</div>`).join('') : '<p class="empty">Nessuna notifica.</p>'}`;
+    ${data?.notifs.length ? data.notifs.map(n => `<div class="row tap" data-nid="${n.id}"><span class="grow"><b>${esc(n.title)}</b>${n.body ? `<br><span class="sub">${esc(n.body)}</span>` : ''}</span>${n.read_at ? '' : '<span class="dot s"></span>'}</div>`).join('') : '<p class="empty">Nessuna notifica.</p>'}`;
 
   const formHTML = () => {
     const f = (t, body, btn) => `<div class="grab"></div><form data-f="${form}"><h2>${t}</h2>${body}<p class="msg" id="fmsg"></p><button class="btn primary">${btn}</button></form>`, cn = esc(cname(pk));
@@ -147,12 +163,13 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       <label id="cust" ${sp === 'custom' ? '' : 'hidden'}>Importo da restituire<input name="custom" inputmode="decimal" placeholder="0,00" value="${sp === 'custom' ? (back / 100).toFixed(2).replace('.', ',') : ''}"></label>`, x ? 'Salva modifiche' : 'Salva spesa')
         + (x ? '<button class="btn danger-t del" data-a="delx">Elimina spesa</button>' : '');
     }
-    const b = bal(pk);
+    const b = eff(pk);
     return f(`Salda con ${cn}`, `<p class="sub">${b > 0 ? `Ti deve ${eur(b)}` : `Devi dare ${eur(-b)}`}</p><input name="amount" inputmode="decimal" value="${(Math.abs(b) / 100).toFixed(2).replace('.', ',')}" required>
       <label>Metodo${chips('method', METHODS.map(m => [m, m]), 'Contanti')}</label>`, 'Segna come saldato');
   };
   const openForm = t => { form = t; armed = ''; $('#fsheet').innerHTML = formHTML(); shell.classList.remove('menu', 'notif'); shell.classList.add('form'); };
 
+  const closePerson = () => { $('#person').classList.remove('open'); pk = null; setTimeout(paint, 320); };
   const paint = () => {
     $('#page').innerHTML = pages[tab]();
     $('#dock').innerHTML = TABS.map(([k, l, i]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${i}${l}</button>`).join('');
@@ -160,21 +177,29 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     $('#person').innerHTML = pk && data ? personHTML() : ''; $('#person').classList.toggle('open', !!pk);
     $('#dot').hidden = !data?.notifs.some(n => !n.read_at);
   };
-  const reload = async () => { try { data = await loadLedger(user.id); failed = false; } catch { failed = true; } paint(); };
+  const reload = async () => { try { data = await loadLedger(user.id); failed = false; } catch { failed = !data; } paint(); };
 
   app.onclick = async e => {
-    const t = e.target.closest('[data-a],[data-tab],[data-theme-set],[data-person],[data-flt],[data-psub],[data-item]'), d = t?.dataset;
+    const t = e.target.closest('[data-a],[data-tab],[data-theme-set],[data-person],[data-flt],[data-psub],[data-item],[data-nid]'), d = t?.dataset;
     if (!t) return;
-    if (d.tab) { tab = d.tab; q = ''; flt = 'all'; paint(); scrollTo(0, 0); }
+    if (d.tab) { tab = d.tab; q = ''; flt = 'all'; paint(); scrollTo(0, 0); const p = $('#page'); p.classList.remove('rise'); void p.offsetWidth; p.classList.add('rise'); }
     else if (d.themeSet) { applyTheme(d.themeSet); paint(); }
     else if (d.person) { pk = d.person; psub = 'due'; paint(); }
     else if (d.flt) { flt = d.flt; paint(); }
     else if (d.psub) { psub = d.psub; paint(); }
+    else if (d.nid) {
+      const n = data.notifs.find(x => x.id === d.nid); n.read_at ||= 'x';
+      supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', n.id).then(() => {});
+      const k = n.type === 'expense_shared' ? data.expKey[n.data?.expense_id] : n.type === 'settlement_pending' ? data.pend.find(p => !p.own)?.key : null;
+      shell.classList.remove('notif');
+      if (k && C().some(c => c.id === k)) { pk = k; psub = 'due'; } else tab = n.type === 'link_accepted' ? 'contacts' : 'home';
+      paint();
+    }
     else if (d.item) { const [k, id] = d.item.split(':'); fx = (data.items[pk] || []).find(i => i.kind === k && i.id === id); openForm(k === 'e' ? 'editx' : 'dels'); }
     else if (d.a === 'menu') { shell.classList.remove('notif'); shell.classList.add('menu'); }
     else if (d.a === 'notif') { shell.classList.remove('menu'); shell.classList.add('notif'); }
     else if (d.a === 'close') shell.classList.remove('menu', 'notif', 'form');
-    else if (d.a === 'back') { pk = null; paint(); }
+    else if (d.a === 'back') closePerson();
     else if (d.a === 'out') logout();
     else if (d.a === 'addc') openForm('contact');
     else if (d.a === 'editc') openForm('editc');
@@ -189,10 +214,15 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     } else if (d.a === 'invite') {
       const c = C().find(x => x.id === pk);
       if (norm(c.email) === norm(user.email)) return toast('Questa è la tua stessa email.');
-      const { error } = await supabase.from('link_requests').insert({ contact_id: pk, to_email: c.email.trim().toLowerCase() });
+      const { data: rq, error } = await supabase.from('link_requests').insert({ contact_id: pk, to_email: c.email.trim().toLowerCase() }).select('id').single();
       if (error) return toast(error.code === '23505' ? 'Invito già inviato.' : 'Impossibile inviare l’invito.');
-      const text = `${name} ti invita su Mezza per dividere le spese: ${location.origin}\nRegistrati o accedi con ${c.email} e accetta l’invito.`;
-      if (navigator.share) navigator.share({ text }).catch(() => {}); else { await navigator.clipboard.writeText(text); toast('Invito creato: messaggio copiato'); }
+      const { data: r } = await supabase.functions.invoke('send-invite', { body: { request_id: rq.id, app_url: location.origin } });
+      if (r?.sent) toast(`Invito inviato a ${c.email}`);
+      else if (r?.reason === 'has_account') toast('Ha già un account: riceve una notifica.');
+      else {
+        const text = `${name} ti invita su Mezza per dividere le spese: ${location.origin}\nRegistrati o accedi con ${c.email} e accetta l’invito.`;
+        if (navigator.share) navigator.share({ text }).catch(() => {}); else { await navigator.clipboard.writeText(text); toast('Invito creato: messaggio copiato'); }
+      }
       reload();
     } else if (d.a === 'delx' || d.a === 'delc') {
       if (armed !== d.a) { armed = d.a; t.textContent = 'Tocca ancora per confermare'; return; }
@@ -225,7 +255,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   app.onchange = e => { if (e.target.name === 'split') $('#cust').hidden = e.target.value !== 'custom'; };
   app.onsubmit = async e => {
     e.preventDefault();
-    const k = e.target.dataset.f, f = Object.fromEntries(new FormData(e.target)), btn = e.target.querySelector('.primary'); btn.disabled = true;
+    const k = e.target.dataset.f, f = Object.fromEntries(new FormData(e.target)), btn = e.target.querySelector('.primary'); if (busy) return; busy = true; btn.disabled = true;
     try {
       if (k === 'contact') {
         const { error } = await supabase.from('contacts').insert({ name: f.name.trim(), email: f.email.trim() || null, phone: f.phone.trim() || null }); if (error) throw error;
@@ -240,13 +270,20 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
         if (error) throw error;
       } else {
         const amt = cents(f.amount); if (!(amt > 0)) throw new Error('Importo non valido.');
-        const { error } = await supabase.from('settlements').insert({ contact_id: pk, direction: bal(pk) > 0 ? 'received' : 'paid', amount_cents: amt, method: f.method }); if (error) throw error;
+        if (amt > Math.abs(eff(pk))) throw new Error('L’importo supera il saldo da pareggiare.');
+        const { error } = await supabase.from('settlements').insert({ contact_id: pk, direction: eff(pk) > 0 ? 'received' : 'paid', amount_cents: amt, method: f.method }); if (error) throw error;
       }
       shell.classList.remove('form'); await reload(); toast('Salvato');
     } catch (err) { const m = $('#fmsg'); m.textContent = err.message?.length < 80 ? err.message : 'Qualcosa è andato storto. Riprova.'; m.className = 'msg err'; }
-    finally { btn.disabled = false; }
+    finally { btn.disabled = false; busy = false; }
   };
 
   document.onvisibilitychange = () => { if (document.visibilityState === 'visible') reload(); };
+  swipe($('#drawer'), 'left', () => shell.classList.remove('menu'));
+  swipe($('#sheet'), 'down', () => shell.classList.remove('notif'));
+  swipe($('#fsheet'), 'down', () => shell.classList.remove('form'));
+  swipe($('#person'), 'right', closePerson);
+  document.onkeydown = e => { if (e.key === 'Escape') shell.classList.remove('menu', 'notif', 'form'); };
+  window.ononline = () => reload();
   paint(); reload();
 }

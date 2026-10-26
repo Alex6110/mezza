@@ -9,7 +9,7 @@ export async function loadLedger(me) {
       .select('id,title,amount_cents,spent_on,created_by,payer_contact_id,created_at,expense_shares(contact_id,amount_cents)')
       .order('spent_on', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('settlements').select('id,created_by,contact_id,direction,amount_cents,status,method,settled_on,created_at'),
-    supabase.from('notifications').select('id,title,body,created_at,read_at').order('created_at', { ascending: false }).limit(30),
+    supabase.from('notifications').select('id,type,data,title,body,created_at,read_at').order('created_at', { ascending: false }).limit(30),
     supabase.from('link_requests').select('contact_id').eq('from_user', me).eq('status', 'pending'),
     supabase.rpc('my_invites'),
   ]);
@@ -38,16 +38,18 @@ export async function loadLedger(me) {
   }
   for (const t of s.data) {
     const own = t.created_by === me;
-    if (t.status === 'pending') pend.push({ id: t.id, own, key: own ? t.contact_id : keyOf(t.created_by), amount: t.amount_cents, dir: t.direction });
+    if (t.status === 'pending') pend.push({ id: t.id, own, key: own ? t.contact_id : keyOf(t.created_by), amount: t.amount_cents, dir: t.direction, v: (own ? t.direction === 'paid' : t.direction === 'received') ? t.amount_cents : -t.amount_cents });
     if (t.status !== 'confirmed') continue;
     const iGave = own ? t.direction === 'paid' : t.direction === 'received';
     add(own ? t.contact_id : keyOf(t.created_by), iGave ? t.amount_cents : -t.amount_cents, { kind: 's', id: t.id, own, method: t.method, date: t.settled_on, ts: t.created_at });
   }
+  const expKey = {};
+  for (const x of e.data) expKey[x.id] = x.created_by === me ? (x.expense_shares.find(s => s.contact_id)?.contact_id ?? x.payer_contact_id) : keyOf(x.created_by);
   const v = Object.values(bal);
   return {
     owed: v.filter(x => x > 0).reduce((a, b) => a + b, 0),
     owe: Math.abs(v.filter(x => x < 0).reduce((a, b) => a + b, 0)),
-    contacts: mine, bal, items, pend, invites: inv.data || [], sent: new Set(lr.data.map(x => x.contact_id)),
+    contacts: mine, bal, items, pend, expKey, invites: inv.data || [], sent: new Set(lr.data.map(x => x.contact_id)),
     recent: e.data.slice(0, 6).map(x => ({ ...x, delta: delta[x.id] })),
     notifs: n.data,
   };
