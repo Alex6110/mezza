@@ -46,6 +46,7 @@ function openItems(its) {
 }
 
 // Chiusura con gesto: trascina il pannello verso il bordo (dir: 'down' | 'left' | 'right').
+const save = (txt, fn, type) => { const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([txt], { type })), download: fn }); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
 const swipe = (el, dir, close) => {
   let x0, y0, d = 0, on = false;
   el.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; d = 0; on = false; }, { passive: true });
@@ -61,8 +62,8 @@ const swipe = (el, dir, close) => {
 };
 
 export function mountShell(app, user, { applyTheme, getTheme, logout }) {
-  const name = user.user_metadata?.name || user.email.split('@')[0];
-  let tab = 'home', data = null, failed = false, q = '', flt = 'all', pk = null, psub = 'due', form = null, tt, fx = null, armed = '', busy = false;
+  let name = user.user_metadata?.name || user.email.split('@')[0];
+  let tab = 'home', data = null, failed = false, q = '', flt = 'all', pk = null, psub = 'due', form = null, tt, fx = null, armed = '', busy = false, pref = { split: 'half' };
 
   app.innerHTML = `<div class="shell" id="shell">
     <header class="top"><button class="badge" data-a="menu" aria-label="Menu">${esc(name[0].toUpperCase())}</button>
@@ -112,7 +113,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const invitesHTML = () => (data?.invites || []).map(i => `<div class="card inv"><div class="row"><span class="ico">${I.users}</span><span class="grow"><b>${esc(i.from_name || i.from_email)}</b><br><span class="sub">ti invita a condividere i conti</span></span></div>
     <div class="acts pad"><button class="btn primary" data-a="inv-y" data-id="${i.id}">Accetta</button><button class="btn" data-a="inv-n" data-id="${i.id}">Rifiuta</button></div></div>`).join('');
   const linkHTML = c => c.linked_user_id ? `<p class="chipinfo">${I.check}Collegato: vedete le stesse spese</p>`
-    : data.sent.has(c.id) ? `<p class="chipinfo">${I.send}Invito inviato. Compare quando ${esc(c.name.split(' ')[0])} accede con ${esc(c.email || 'la sua email')}.</p>`
+    : data.sent.has(c.id) ? `<p class="chipinfo">${I.send}Invito inviato. Compare quando ${esc(c.name.split(' ')[0])} accede con ${esc(c.email || 'la sua email')}.</p>${c.email ? `<button class="btn link-b" data-a="resend">Reinvia l’email</button>` : ''}`
     : `<button class="btn link-b" data-a="${c.email ? 'invite' : 'editc'}">${I.users}${c.email ? 'Invita su Mezza' : 'Aggiungi l’email per invitare'}</button>`;
   const pendHTML = () => data.pend.filter(p => p.key === pk).map(p => p.own ? `<p class="chipinfo">Saldo di ${eur(p.amount)} in attesa di conferma.</p>`
     : `<div class="card inv"><div class="row"><span class="grow"><b>Saldo da confermare</b><br><span class="sub">${p.dir === 'paid' ? 'Dice di averti dato' : 'Dice di aver ricevuto da te'} ${eur(p.amount)}</span></span></div>
@@ -143,19 +144,27 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const drawer = () => { const t = getTheme(); return `<button class="x" data-a="close" aria-label="Chiudi">${I.x}</button>
     <div class="avatar big">${esc(name[0].toUpperCase())}</div><h2 class="nm">${esc(name)}</h2><p class="sub">${esc(user.email)}</p>
     <h3>Aspetto</h3>${seg('theme-set', t, [['system', 'Sistema'], ['light', 'Chiaro'], ['dark', 'Scuro']])}
-    <button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · fase 5.1</p>`; };
+<h3>Impostazioni</h3><div class="card">${[['prof', 'Profilo', I.users], ['prefs', 'Preferenze', I.list], ['pwd', 'Password', I.edit], ['mail', 'Email', I.send], ['data', 'Dati e account', I.pdf]]
+      .map(([k, l, i]) => `<button class="row" data-a="set:${k}">${i}<span class="grow">${l}</span></button>`).join('')}</div>
+    <button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · fase 6</p>`; };
   const sheet = () => `<div class="grab"></div><div class="sheet-h"><h2>Notifiche</h2>${data?.notifs.some(n => !n.read_at) ? '<button class="link" data-a="readall">Segna come lette</button>' : ''}</div>
     ${data?.notifs.length ? data.notifs.map(n => `<div class="row tap" data-nid="${n.id}"><span class="grow"><b>${esc(n.title)}</b>${n.body ? `<br><span class="sub">${esc(n.body)}</span>` : ''}</span>${n.read_at ? '' : '<span class="dot s"></span>'}</div>`).join('') : '<p class="empty">Nessuna notifica.</p>'}`;
 
   const formHTML = () => {
     const f = (t, body, btn) => `<div class="grab"></div><form data-f="${form}"><h2>${t}</h2>${body}<p class="msg" id="fmsg"></p><button class="btn primary">${btn}</button></form>`, cn = esc(cname(pk));
     if (form === 'contact') return f('Nuovo contatto', '<input name="name" placeholder="Nome" required maxlength="60"><input name="email" type="email" placeholder="Email (facoltativa)"><input name="phone" type="tel" placeholder="Telefono (facoltativo)">', 'Aggiungi');
+    if (form === 'prof') return f('Profilo', `<input name="name" value="${esc(name)}" required maxlength="40" placeholder="Nome visualizzato"><p class="sub">È il nome che vedono le persone collegate a te.</p>`, 'Salva');
+    if (form === 'prefs') return f('Preferenze', `<label>Divisione predefinita delle nuove spese${chips('split', [['half', 'Metà'], ['all', 'Tutto da restituire']], pref.split)}</label>`, 'Salva');
+    if (form === 'pwd') return f('Cambia password', '<input name="password" type="password" minlength="8" placeholder="Nuova password (almeno 8 caratteri)" autocomplete="new-password" required>', 'Aggiorna password');
+    if (form === 'mail') return f('Cambia email', '<p class="sub">Ti mandiamo un link di conferma. Finché non lo apri, l’email di accesso resta quella attuale.</p><input name="email" type="email" placeholder="Nuovo indirizzo" required>', 'Invia conferma');
+    if (form === 'data') return `<div class="grab"></div><div class="dform"><h2>Dati e account</h2><button class="btn" data-a="exp-json">Esporta tutto (JSON)</button><button class="btn" data-a="exp-csv">Esporta spese (CSV)</button><button class="btn danger-t" data-a="set:del">Elimina account…</button></div>`;
+    if (form === 'del') return f('Elimina account', '<p class="sub">Cancella per sempre i tuoi contatti, le tue spese e i tuoi saldi. Le spese create da altri restano a loro. Scrivi ELIMINA per confermare.</p><input name="word" placeholder="ELIMINA" required autocomplete="off">', 'Elimina definitivamente');
     if (form === 'editc') { const c = C().find(x => x.id === pk);
       return f('Modifica contatto', `<input name="name" value="${esc(c.name)}" required maxlength="60"><input name="email" type="email" placeholder="Email" value="${esc(c.email || '')}"><input name="phone" type="tel" placeholder="Telefono" value="${esc(c.phone || '')}">`, 'Salva')
         + '<button class="btn danger-t del" data-a="delc">Elimina contatto</button>'; }
     if (form === 'dels') return `<div class="grab"></div><div class="dform"><h2>Saldo del ${dshort(fx.date)}</h2><p class="sub">${esc(fx.method || 'Saldo')} · ${eur(Math.abs(fx.v))}</p><button class="btn danger-t" data-a="delx">Elimina saldo</button></div>`;
     if (form === 'expense' || form === 'editx') {
-      const x = form === 'editx' ? fx : null, back = x ? Math.abs(x.v) : 0, sp = !x ? 'half' : back === Math.round(x.total / 2) ? 'half' : back === x.total ? 'all' : 'custom';
+      const x = form === 'editx' ? fx : null, back = x ? Math.abs(x.v) : 0, sp = !x ? (pref.split || 'half') : back === Math.round(x.total / 2) ? 'half' : back === x.total ? 'all' : 'custom';
       return f(x ? 'Modifica spesa' : 'Nuova spesa', `<input name="title" placeholder="Descrizione" required maxlength="80" value="${esc(x?.title || '')}">
       <div class="two"><input name="amount" inputmode="decimal" placeholder="Importo" required value="${x ? (x.total / 100).toFixed(2).replace('.', ',') : ''}"><input name="date" type="date" value="${x?.date || today()}" required></div>
       <label>Pagato da${chips('paid', [['me', 'Io'], ['them', cname(pk)]], x && !x.iPaid ? 'them' : 'me')}</label>
@@ -201,6 +210,15 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     else if (d.a === 'close') shell.classList.remove('menu', 'notif', 'form');
     else if (d.a === 'back') closePerson();
     else if (d.a === 'out') logout();
+    else if (d.a?.startsWith('set:')) openForm(d.a.slice(4));
+    else if (d.a === 'exp-json') {
+      const [c, e, s] = await Promise.all([supabase.from('contacts').select('*'), supabase.from('expenses').select('*,expense_shares(*)'), supabase.from('settlements').select('*')]);
+      save(JSON.stringify({ exported: new Date().toISOString(), contacts: c.data, expenses: e.data, settlements: s.data }, null, 2), 'mezza-dati.json', 'application/json');
+    } else if (d.a === 'exp-csv') {
+      const rows = [['data', 'persona', 'descrizione', 'tipo', 'importo']];
+      for (const c of C()) for (const it of data.items[c.id] || []) rows.push([it.date, c.name, it.kind === 'e' ? it.title : 'Saldo', it.kind === 'e' ? 'spesa' : 'saldo', (it.v / 100).toFixed(2).replace('.', ',')]);
+      save('\ufeff' + rows.map(r => r.map(x => `"${String(x).replace(/"/g, '""')}"`).join(';')).join('\n'), 'mezza-spese.csv', 'text/csv');
+    }
     else if (d.a === 'addc') openForm('contact');
     else if (d.a === 'editc') openForm('editc');
     else if (d.a === 'pdf') personPdf(C().find(x => x.id === pk), data.items[pk] || [], bal(pk)).catch(() => toast('PDF non disponibile.'));
@@ -220,10 +238,15 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       if (r?.sent) toast(`Invito inviato a ${c.email}`);
       else if (r?.reason === 'has_account') toast('Ha già un account: riceve una notifica.');
       else {
+        console.warn('send-invite', r); toast(r?.error ? 'Email non inviata: ' + r.error.slice(0, 70) : 'Email non inviata.');
         const text = `${name} ti invita su Mezza per dividere le spese: ${location.origin}\nRegistrati o accedi con ${c.email} e accetta l’invito.`;
         if (navigator.share) navigator.share({ text }).catch(() => {}); else { await navigator.clipboard.writeText(text); toast('Invito creato: messaggio copiato'); }
       }
       reload();
+    } else if (d.a === 'resend') {
+      const { data: r } = await supabase.functions.invoke('send-invite', { body: { request_id: data.sent.get(pk), app_url: location.origin } });
+      console.warn('send-invite', r);
+      toast(r?.sent ? 'Email inviata' : r?.reason === 'already' ? 'Email già inviata.' : r?.reason === 'has_account' ? 'Ha già un account: riceve una notifica.' : 'Email non inviata: ' + (r?.error?.slice(0, 70) || 'errore'));
     } else if (d.a === 'delx' || d.a === 'delc') {
       if (armed !== d.a) { armed = d.a; t.textContent = 'Tocca ancora per confermare'; return; }
       const { error } = d.a === 'delc' ? await supabase.from('contacts').delete().eq('id', pk)
@@ -255,10 +278,24 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   app.onchange = e => { if (e.target.name === 'split') $('#cust').hidden = e.target.value !== 'custom'; };
   app.onsubmit = async e => {
     e.preventDefault();
-    const k = e.target.dataset.f, f = Object.fromEntries(new FormData(e.target)), btn = e.target.querySelector('.primary'); if (busy) return; busy = true; btn.disabled = true;
+    const k = e.target.dataset.f, f = Object.fromEntries(new FormData(e.target)), btn = e.target.querySelector('.primary'); if (busy) return; busy = true; btn.disabled = true; let ok = 'Salvato';
     try {
       if (k === 'contact') {
         const { error } = await supabase.from('contacts').insert({ name: f.name.trim(), email: f.email.trim() || null, phone: f.phone.trim() || null }); if (error) throw error;
+      } else if (k === 'prof') {
+        const nm = f.name.trim(), a = await supabase.auth.updateUser({ data: { name: nm } }); if (a.error) throw a.error;
+        const b = await supabase.from('profiles').update({ display_name: nm }).eq('id', user.id); if (b.error) throw b.error;
+        name = nm; $('.badge').textContent = nm[0].toUpperCase();
+      } else if (k === 'prefs') {
+        pref = { ...pref, split: f.split };
+        const { error } = await supabase.from('profiles').update({ settings: pref }).eq('id', user.id); if (error) throw error;
+      } else if (k === 'pwd') {
+        const { error } = await supabase.auth.updateUser({ password: f.password }); if (error) throw error; ok = 'Password aggiornata';
+      } else if (k === 'mail') {
+        const { error } = await supabase.auth.updateUser({ email: f.email.trim() }, { emailRedirectTo: location.origin }); if (error) throw error; ok = 'Controlla la posta per confermare';
+      } else if (k === 'del') {
+        if (f.word.trim() !== 'ELIMINA') throw new Error('Scrivi ELIMINA per confermare.');
+        const { error } = await supabase.rpc('delete_my_account'); if (error) throw error; logout(); return;
       } else if (k === 'editc') {
         const { error } = await supabase.from('contacts').update({ name: f.name.trim(), email: f.email.trim() || null, phone: f.phone.trim() || null }).eq('id', pk); if (error) throw error;
       } else if (k === 'expense' || k === 'editx') {
@@ -273,7 +310,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
         if (amt > Math.abs(eff(pk))) throw new Error('L’importo supera il saldo da pareggiare.');
         const { error } = await supabase.from('settlements').insert({ contact_id: pk, direction: eff(pk) > 0 ? 'received' : 'paid', amount_cents: amt, method: f.method }); if (error) throw error;
       }
-      shell.classList.remove('form'); await reload(); toast('Salvato');
+      shell.classList.remove('form'); await reload(); toast(ok);
     } catch (err) { const m = $('#fmsg'); m.textContent = err.message?.length < 80 ? err.message : 'Qualcosa è andato storto. Riprova.'; m.className = 'msg err'; }
     finally { btn.disabled = false; busy = false; }
   };
@@ -285,5 +322,6 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   swipe($('#person'), 'right', closePerson);
   document.onkeydown = e => { if (e.key === 'Escape') shell.classList.remove('menu', 'notif', 'form'); };
   window.ononline = () => reload();
+  supabase.from('profiles').select('settings').eq('id', user.id).single().then(({ data: p }) => { if (p?.settings) pref = { ...pref, ...p.settings }; });
   paint(); reload();
 }

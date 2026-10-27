@@ -133,3 +133,10 @@ h2 { font-size: .95rem; color: var(--muted); font-weight: 600; margin: 26px 4px 
 .btn, .row.tap, .chip, .dock button, .bell, .badge, .back, .fav { transition: transform .15s, background .2s, color .2s; }
 .btn:active, .row.tap:active, .chip:active, .dock button:active, .bell:active, .badge:active, .back:active, .fav:active { transform: scale(.96); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition-duration: .01ms !important; } }
+
+/* ===== Fase 6: impostazioni ===== */
+.drawer { overflow-y: auto; }
+.drawer .card { margin-top: 2px; }
+.drawer button.row { background: none; border: 0; color: inherit; text-align: left; cursor: pointer; padding: 13px 16px; }
+.drawer button.row .i { color: var(--primary); }
+.drawer .btn.danger-t { margin-top: 18px; flex: none; }

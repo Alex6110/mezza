@@ -25,7 +25,9 @@ Deno.serve(async req => {
 
     const { data: me } = await admin.from('profiles').select('display_name').eq('id', r.from_user).single();
     const who = me?.display_name || 'Un amico', link = String(app_url || '').startsWith('https://') ? app_url : 'https://mezza-app.netlify.app';
-    const tx = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: Deno.env.get('SMTP_USER'), pass: Deno.env.get('SMTP_PASS') } });
+    const SU = Deno.env.get('SMTP_USER'), SP = (Deno.env.get('SMTP_PASS') || '').replace(/\s/g, '');
+    if (!SU || !SP) return json({ sent: false, error: 'Mancano i segreti SMTP_USER o SMTP_PASS' });
+    const tx = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user: SU, pass: SP }, connectionTimeout: 15000 });
     await tx.sendMail({
       from: `Mezza <${Deno.env.get('SMTP_USER')}>`, to: r.to_email, subject: `${who} ti invita su Mezza`,
       text: `${who} ti ha invitato su Mezza, l'app per dividere le spese.\n\nRegistrati con questa email (${r.to_email}) e accetta l'invito:\n${link}\n`,
@@ -36,5 +38,5 @@ Deno.serve(async req => {
     });
     await admin.from('link_requests').update({ emailed_at: new Date().toISOString() }).eq('id', r.id);
     return json({ sent: true });
-  } catch (e) { return json({ sent: false, error: String(e) }, 500); }
+  } catch (e) { console.error('send-invite', e); return json({ sent: false, error: String((e as Error)?.message || e) }); }   // 200 così l'app può leggere il motivo
 });

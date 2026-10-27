@@ -10,7 +10,7 @@ export async function loadLedger(me) {
       .order('spent_on', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('settlements').select('id,created_by,contact_id,direction,amount_cents,status,method,settled_on,created_at'),
     supabase.from('notifications').select('id,type,data,title,body,created_at,read_at').order('created_at', { ascending: false }).limit(30),
-    supabase.from('link_requests').select('contact_id').eq('from_user', me).eq('status', 'pending'),
+    supabase.from('link_requests').select('id,contact_id').eq('from_user', me).eq('status', 'pending'),
     supabase.rpc('my_invites'),
   ]);
   const err = [c, e, s, n, lr, inv].find(r => r.error)?.error;
@@ -49,7 +49,7 @@ export async function loadLedger(me) {
   return {
     owed: v.filter(x => x > 0).reduce((a, b) => a + b, 0),
     owe: Math.abs(v.filter(x => x < 0).reduce((a, b) => a + b, 0)),
-    contacts: mine, bal, items, pend, expKey, invites: inv.data || [], sent: new Set(lr.data.map(x => x.contact_id)),
+    contacts: mine, bal, items, pend, expKey, invites: inv.data || [], sent: new Map(lr.data.map(x => [x.contact_id, x.id])),
     recent: e.data.slice(0, 6).map(x => ({ ...x, delta: delta[x.id] })),
     notifs: n.data,
   };
