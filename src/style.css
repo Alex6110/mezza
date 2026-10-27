@@ -140,3 +140,15 @@ h2 { font-size: .95rem; color: var(--muted); font-weight: 600; margin: 26px 4px 
 .drawer button.row { background: none; border: 0; color: inherit; text-align: left; cursor: pointer; padding: 13px 16px; }
 .drawer button.row .i { color: var(--primary); }
 .drawer .btn.danger-t { margin-top: 18px; flex: none; }
+
+/* ===== Fase 8: rifiniture, gruppi come contenitore, privacy ===== */
+input[type="date"] { min-width: 0; max-width: 100%; display: block; -webkit-appearance: none; appearance: none; min-height: 48px; }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .two > * { min-width: 0; }
+.chipinfo.warn { color: var(--danger); } .chipinfo.warn .i { color: var(--danger); }
+.xc { margin-bottom: 12px; } .xc .row .i { color: var(--muted); }
+.parts { border-top: 1px solid var(--border); padding: 10px 16px 13px; display: grid; gap: 6px; }
+.part { display: flex; justify-content: space-between; gap: 10px; font-size: .92rem; color: var(--muted); } .part b { color: var(--text); }
+.legal { font-size: .8rem; color: var(--muted); text-align: center; } .legal a, .plink { color: var(--primary); }
+.plink { display: block; text-align: center; margin-top: 14px; text-decoration: none; }
+.hero.p .net { margin-top: 6px; }

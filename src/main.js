@@ -49,6 +49,7 @@ function authView() {
       ${field('Password', 'password', 'password', `minlength="8" autocomplete="${signup ? 'new-password' : 'current-password'}"`)}
       <p class="msg" id="msg"></p>
       <button class="btn primary">${signup ? 'Crea account' : 'Accedi'}</button>
+      ${signup ? '<p class="legal">Registrandoti accetti l’<a href="/privacy.html" target="_blank" rel="noopener">informativa privacy</a>.</p>' : ''}
       ${signup ? '' : '<button type="button" class="link" data-mode="forgot">Password dimenticata?</button>'}
     </form>`;
 }

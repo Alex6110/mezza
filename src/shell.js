@@ -76,9 +76,10 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const toast = t => { const e = $('#toast'); e.textContent = t; e.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => e.classList.remove('show'), 2600); };
   const C = () => data?.contacts || [], bal = id => data?.bal[id] || 0, cname = id => C().find(c => c.id === id)?.name || '?';
   const eff = id => bal(id) + (data?.pend || []).filter(p => p.key === id).reduce((s, p) => s + p.v, 0);   // saldo al netto dei saldi in attesa
+  const gone = c => !!c?.account_deleted && !data.reg.has(c.id);   // account Mezza eliminato
   const match = c => norm(c.name).includes(norm(q));
 
-  const contactRow = c => `<div class="row tap" data-person="${c.id}">${av(c.id, c.name)}<span class="grow"><b>${esc(c.name)}</b><br><span class="sub">${esc(c.phone || c.email || 'Nessun recapito')}</span></span>
+  const contactRow = c => `<div class="row tap" data-person="${c.id}">${av(c.id, c.name)}<span class="grow"><b>${esc(c.name)}</b><br><span class="sub ${gone(c) ? 'neg' : ''}">${gone(c) ? 'Account Mezza eliminato' : esc(c.phone || c.email || 'Nessun recapito')}</span></span>
     <button class="star ${c.favorite ? 'on' : ''}" data-a="fav" data-id="${c.id}" aria-label="Preferito">${I.star}</button></div>`;
   const consRow = c => `<div class="row tap" data-person="${c.id}">${av(c.id, c.name)}<span class="grow"><b>${esc(c.name)}</b><br>
     <span class="sub">${bal(c.id) > 0 ? 'ti deve' : bal(c.id) < 0 ? 'devi dare' : 'tutto saldato'}</span></span>${sg(bal(c.id))}</div>`;
@@ -116,9 +117,15 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
 
   const invitesHTML = () => (data?.invites || []).map(i => `<div class="card inv"><div class="row"><span class="ico">${I.users}</span><span class="grow"><b>${esc(i.from_name || i.from_email)}</b><br><span class="sub">ti invita a condividere i conti</span></span></div>
     <div class="acts pad"><button class="btn primary" data-a="inv-y" data-id="${i.id}">Accetta</button><button class="btn" data-a="inv-n" data-id="${i.id}">Rifiuta</button></div></div>`).join('');
-  const linkHTML = c => c.linked_user_id ? `<p class="chipinfo">${I.check}Collegato: vedete le stesse spese</p>`
-    : data.sent.has(c.id) ? `<p class="chipinfo">${I.send}Invito inviato. Compare quando ${esc(c.name.split(' ')[0])} accede con ${esc(c.email || 'la sua email')}.</p>${c.email ? `<button class="btn link-b" data-a="resend">Reinvia l’email</button>` : ''}`
-    : `<button class="btn link-b" data-a="${c.email ? 'invite' : 'editc'}">${I.users}${c.email ? 'Invita su Mezza' : 'Aggiungi l’email per invitare'}</button>`;
+  const linkHTML = c => {
+    if (c.linked_user_id) return `<p class="chipinfo">${I.check}Collegato: vedete le stesse spese</p>`;
+    if (gone(c)) return `<p class="chipinfo warn">${I.x}Questo account Mezza è stato eliminato: non puoi più collegarlo né invitarlo. Lo storico resta qui.</p>`;
+    const reg = data.reg.has(c.id);
+    if (data.sent.has(c.id)) return `<p class="chipinfo">${I.send}${reg ? 'Richiesta di collegamento inviata: la vede in Mezza.' : `Invito inviato. Compare quando ${esc(c.name.split(' ')[0])} accede con ${esc(c.email || 'la sua email')}.`}</p>`
+      + (!reg && c.email ? '<button class="btn link-b" data-a="resend">Reinvia l’email</button>' : '');
+    if (reg) return `<button class="btn link-b" data-a="invite">${I.users}Collega l’account Mezza</button>`;
+    return `<button class="btn link-b" data-a="${c.email ? 'invite' : 'editc'}">${I.users}${c.email ? 'Invita su Mezza' : 'Aggiungi l’email per invitare'}</button>`;
+  };
   const pendHTML = () => data.pend.filter(p => p.key === pk).map(p => p.own ? `<p class="chipinfo">Saldo di ${eur(p.amount)} in attesa di conferma.</p>`
     : `<div class="card inv"><div class="row"><span class="grow"><b>Saldo da confermare</b><br><span class="sub">${p.dir === 'paid' ? 'Dice di averti dato' : 'Dice di aver ricevuto da te'} ${eur(p.amount)}</span></span></div>
       <div class="acts pad"><button class="btn primary" data-a="set-y" data-id="${p.id}">Conferma</button><button class="btn" data-a="set-n" data-id="${p.id}">Rifiuta</button></div></div>`).join('');
@@ -128,11 +135,15 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     const g = data.groups.find(x => x.id === gk); if (!g) return '';
     const mem = g.group_members.map(m => C().find(c => c.id === m.contact_id)).filter(Boolean), net = gnet(g);
     const ex = data.exps.filter(x => x.groupId === gk).sort((a, b) => (b.date + b.ts).localeCompare(a.date + a.ts));
+    const quota = id => ex.reduce((s, x) => s + (x.shares.find(h => (h.contact_id ?? 'me') === id)?.amount_cents || 0), 0);
+    const who = id => id === 'me' ? 'Io' : cname(id), total = ex.reduce((s, x) => s + x.total, 0);
     return `<div class="ptop"><button class="back" data-a="back" aria-label="Indietro">${I.back}</button>${av(g.id, g.name)}<b class="grow">${esc(g.name)}</b><button class="back" data-a="editg" aria-label="Modifica gruppo">${I.edit}</button></div>
-      <section class="hero p"><span>${net > 0 ? 'Nel gruppo ti devono' : net < 0 ? 'Nel gruppo devi dare' : 'Gruppo in pari'}</span><strong>${eur(Math.abs(net))}</strong></section>
+      <section class="hero p"><span>${net > 0 ? 'Nel gruppo ti devono' : net < 0 ? 'Nel gruppo devi dare' : 'Gruppo in pari'}</span><strong>${eur(Math.abs(net))}</strong><p class="net">Spesa totale del gruppo <b>${eur(total)}</b></p></section>
       <div class="acts"><button class="btn primary" data-a="newg">${I.plus}Nuova spesa</button></div>
-      <h2>Persone</h2>${mem.length ? `<div class="card">${mem.map(c => `<div class="row tap" data-person="${c.id}">${av(c.id, c.name)}<span class="grow"><b>${esc(c.name)}</b></span>${sg((data.items[c.id] || []).filter(i => i.kind === 'e' && i.groupId === gk).reduce((s, i) => s + i.v, 0))}</div>`).join('')}</div>` : '<p class="empty">Nessuna persona nel gruppo: aggiungila dalla matita.</p>'}
-      <h2>Spese del gruppo</h2>${ex.length ? `<div class="card">${ex.map(x => `<div class="row tap" data-item="e:${x.id}"><span class="ico">${I.list}</span><span class="grow"><b>${esc(x.title)}</b><br><span class="sub">${dshort(x.date)} · ${eur(x.total)} · pagato da ${x.payerC ? esc(cname(x.payerC)) : 'te'}</span></span>${x.delta ? sg(x.delta) : '<span class="sub">Non coinvolto</span>'}</div>`).join('')}</div>` : '<p class="empty">Ancora nessuna spesa nel gruppo.</p>'}`;
+      <h2>Persone e quote</h2><div class="card"><div class="row">${av('me', name)}<span class="grow"><b>Io</b><br><span class="sub">quota totale ${eur(quota('me'))}</span></span></div>
+        ${mem.map(c => `<div class="row tap" data-person="${c.id}">${av(c.id, c.name)}<span class="grow"><b>${esc(c.name)}</b><br><span class="sub">quota totale ${eur(quota(c.id))}</span></span>${sg((data.items[c.id] || []).filter(i => i.kind === 'e' && i.groupId === gk).reduce((s, i) => s + i.v, 0))}</div>`).join('')}</div>
+      <h2>Spese del gruppo</h2>${ex.length ? ex.map(x => `<div class="card xc"><div class="row tap" data-item="e:${x.id}"><span class="ico">${I.list}</span><span class="grow"><b>${esc(x.title)}</b><br><span class="sub">${dshort(x.date)} · ${eur(x.total)}</span></span>${I.edit}</div>
+        <div class="parts">${x.shares.map(h => { const id = h.contact_id ?? 'me'; return `<div class="part"><span>${esc(who(id))}${id === (x.payerC ?? 'me') ? ' · ha pagato' : ''}</span><b>${eur(h.amount_cents)}</b></div>`; }).join('')}</div></div>`).join('') : '<p class="empty">Ancora nessuna spesa nel gruppo.</p>'}`;
   };
   const itemRow = ({ it, rem }, cn) => {
     const v = rem ?? it.v, e = it.kind === 'e';
@@ -162,7 +173,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     <h3>Aspetto</h3>${seg('theme-set', t, [['system', 'Sistema'], ['light', 'Chiaro'], ['dark', 'Scuro']])}
 <h3>Impostazioni</h3><div class="card">${[['prof', 'Profilo', I.users], ['prefs', 'Preferenze', I.list], ['pwd', 'Password', I.edit], ['mail', 'Email', I.send], ['data', 'Dati e account', I.pdf]]
       .map(([k, l, i]) => `<button class="row" data-a="set:${k}">${i}<span class="grow">${l}</span></button>`).join('')}</div>
-    <button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · fase 7</p>`; };
+    <a class="sub plink" href="/privacy.html" target="_blank" rel="noopener">Informativa privacy</a><button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · fase 7</p>`; };
   const sheet = () => `<div class="grab"></div><div class="sheet-h"><h2>Notifiche</h2>${data?.notifs.some(n => !n.read_at) ? '<button class="link" data-a="readall">Segna come lette</button>' : ''}</div>
     ${data?.notifs.length ? data.notifs.map(n => `<div class="row tap" data-nid="${n.id}"><span class="grow"><b>${esc(n.title)}</b>${n.body ? `<br><span class="sub">${esc(n.body)}</span>` : ''}</span>${n.read_at ? '' : '<span class="dot s"></span>'}</div>`).join('') : '<p class="empty">Nessuna notifica.</p>'}`;
 
@@ -253,7 +264,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', n.id).then(() => {});
       const k = n.type === 'expense_shared' ? data.expKey[n.data?.expense_id] : n.type === 'settlement_pending' ? data.pend.find(p => !p.own)?.key : null;
       shell.classList.remove('notif');
-      if (k && C().some(c => c.id === k)) { pk = k; psub = 'due'; } else tab = n.type === 'link_accepted' ? 'contacts' : 'home';
+      if (k && C().some(c => c.id === k)) { pk = k; psub = 'due'; } else tab = ['link_accepted', 'account_deleted'].includes(n.type) ? 'contacts' : 'home';
       paint();
     }
     else if (d.group) { gk = d.group; paint(); }
@@ -296,7 +307,8 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       const c = C().find(x => x.id === pk);
       if (norm(c.email) === norm(user.email)) return toast('Questa è la tua stessa email.');
       const { data: rq, error } = await supabase.from('link_requests').insert({ contact_id: pk, to_email: c.email.trim().toLowerCase() }).select('id').single();
-      if (error) return toast(error.code === '23505' ? 'Invito già inviato.' : 'Impossibile inviare l’invito.');
+      if (error) return toast(error.code === '23505' ? 'Invito già inviato.' : /eliminato/.test(error.message) ? 'Questo account è stato eliminato: impossibile invitarlo.' : 'Impossibile inviare l’invito.');
+      if (data.reg.has(pk)) { toast('Richiesta di collegamento inviata'); return reload(); }
       const { data: r } = await supabase.functions.invoke('send-invite', { body: { request_id: rq.id, app_url: location.origin } });
       if (r?.sent) toast(`Invito inviato a ${c.email}`);
       else if (r?.reason === 'has_account') toast('Ha già un account: riceve una notifica.');
@@ -307,6 +319,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       }
       reload();
     } else if (d.a === 'resend') {
+      if (gone(C().find(x => x.id === pk))) return toast('Account eliminato: impossibile inviare email.');
       const { data: r } = await supabase.functions.invoke('send-invite', { body: { request_id: data.sent.get(pk), app_url: location.origin } });
       console.warn('send-invite', r);
       toast(r?.sent ? 'Email inviata' : r?.reason === 'already' ? 'Email già inviata.' : r?.reason === 'has_account' ? 'Ha già un account: riceve una notifica.' : 'Email non inviata: ' + (r?.error?.slice(0, 70) || 'errore'));

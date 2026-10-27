@@ -16,12 +16,14 @@ Deno.serve(async req => {
     const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
     const { data: { user } } = await caller.auth.getUser();
-    const { data: r } = await caller.from('link_requests').select('id,to_email,status,emailed_at,from_user').eq('id', request_id).single();
+    const { data: r } = await caller.from('link_requests').select('id,to_email,status,emailed_at,from_user,contact_id').eq('id', request_id).single();
     if (!user || !r || r.from_user !== user.id) return json({ sent: false, reason: 'forbidden' }, 403);
     if (r.status !== 'pending' || r.emailed_at) return json({ sent: false, reason: 'already' });
 
     const { data: has } = await admin.from('profiles').select('id').eq('email', r.to_email.toLowerCase()).maybeSingle();
-    if (has) return json({ sent: false, reason: 'has_account' });          // lo avvisa già la notifica in app
+    if (has) return json({ sent: false, reason: 'has_account' });
+    const { data: ct } = await admin.from('contacts').select('account_deleted').eq('id', r.contact_id).maybeSingle();
+    if (ct?.account_deleted) return json({ sent: false, reason: 'deleted' });   // account eliminato: mai email          // lo avvisa già la notifica in app
 
     const { data: me } = await admin.from('profiles').select('display_name').eq('id', r.from_user).single();
     const who = me?.display_name || 'Un amico', link = String(app_url || '').startsWith('https://') ? app_url : 'https://mezza-app.netlify.app';
