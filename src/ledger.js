@@ -3,17 +3,18 @@
 import { supabase } from './supabase.js';
 
 export async function loadLedger(me) {
-  const [c, e, s, n, lr, inv] = await Promise.all([
+  const [c, e, s, n, lr, inv, gr] = await Promise.all([
     supabase.from('contacts').select('id,owner_id,name,email,phone,favorite,linked_user_id'),
     supabase.from('expenses')
-      .select('id,title,amount_cents,spent_on,created_by,payer_contact_id,created_at,expense_shares(contact_id,amount_cents)')
+      .select('id,title,amount_cents,spent_on,created_by,payer_contact_id,group_id,created_at,expense_shares(contact_id,amount_cents)')
       .order('spent_on', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('settlements').select('id,created_by,contact_id,direction,amount_cents,status,method,settled_on,created_at'),
     supabase.from('notifications').select('id,type,data,title,body,created_at,read_at').order('created_at', { ascending: false }).limit(30),
     supabase.from('link_requests').select('id,contact_id').eq('from_user', me).eq('status', 'pending'),
     supabase.rpc('my_invites'),
+    supabase.from('groups').select('id,name,group_members(contact_id)').order('created_at', { ascending: false }),
   ]);
-  const err = [c, e, s, n, lr, inv].find(r => r.error)?.error;
+  const err = [c, e, s, n, lr, inv, gr].find(r => r.error)?.error;
   if (err) throw err;
 
   const mine = c.data.filter(x => x.owner_id === me);
@@ -27,7 +28,7 @@ export async function loadLedger(me) {
     const iPaid = own ? x.payer_contact_id == null : toMe.has(x.payer_contact_id);
     const payerKey = own ? x.payer_contact_id : (x.payer_contact_id == null ? keyOf(x.created_by) : null);
     let d = 0;
-    const ex = { kind: 'e', id: x.id, title: x.title, date: x.spent_on, ts: x.created_at, total: x.amount_cents, iPaid, own };
+    const ex = { kind: 'e', id: x.id, title: x.title, date: x.spent_on, ts: x.created_at, total: x.amount_cents, iPaid, own, groupId: x.group_id, shares: x.expense_shares, payerC: x.payer_contact_id };
     for (const sh of x.expense_shares) {
       const mineShare = own ? sh.contact_id == null : toMe.has(sh.contact_id);
       const otherShare = own ? sh.contact_id != null : sh.contact_id == null;
@@ -45,11 +46,12 @@ export async function loadLedger(me) {
   }
   const expKey = {};
   for (const x of e.data) expKey[x.id] = x.created_by === me ? (x.expense_shares.find(s => s.contact_id)?.contact_id ?? x.payer_contact_id) : keyOf(x.created_by);
+  const exps = e.data.filter(x => x.created_by === me).map(x => ({ id: x.id, title: x.title, date: x.spent_on, ts: x.created_at, total: x.amount_cents, own: true, groupId: x.group_id, shares: x.expense_shares, payerC: x.payer_contact_id, delta: delta[x.id] }));
   const v = Object.values(bal);
   return {
     owed: v.filter(x => x > 0).reduce((a, b) => a + b, 0),
     owe: Math.abs(v.filter(x => x < 0).reduce((a, b) => a + b, 0)),
-    contacts: mine, bal, items, pend, expKey, invites: inv.data || [], sent: new Map(lr.data.map(x => [x.contact_id, x.id])),
+    contacts: mine, bal, items, pend, expKey, exps, groups: gr.data || [], invites: inv.data || [], sent: new Map(lr.data.map(x => [x.contact_id, x.id])),
     recent: e.data.slice(0, 6).map(x => ({ ...x, delta: delta[x.id] })),
     notifs: n.data,
   };
