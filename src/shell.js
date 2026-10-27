@@ -130,7 +130,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     : `<div class="card inv"><div class="row"><span class="grow"><b>Saldo da confermare</b><br><span class="sub">${p.dir === 'paid' ? 'Dice di averti dato' : 'Dice di aver ricevuto da te'} ${eur(p.amount)}</span></span></div>
       <div class="acts pad"><button class="btn primary" data-a="set-y" data-id="${p.id}">Conferma</button><button class="btn" data-a="set-n" data-id="${p.id}">Rifiuta</button></div></div>`).join('');
   const gnet = g => data.exps.filter(x => x.groupId === g.id).reduce((s, x) => s + x.delta, 0);
-  const groupRow = g => `<div class="row tap" data-group="${g.id}">${av(g.id, g.name)}<span class="grow"><b>${esc(g.name)}</b><br><span class="sub">${g.group_members.length + 1} persone</span></span>${sg(gnet(g))}</div>`;
+  const groupRow = g => `<div class="row tap" data-group="${g.id}">${av(g.id, g.name)}<span class="grow"><b>${esc(g.name)}</b><br><span class="sub">${g.group_members.length + 1 === 1 ? '1 persona' : (g.group_members.length + 1) + ' persone'}</span></span>${sg(gnet(g))}</div>`;
   const groupHTML = () => {
     const g = data.groups.find(x => x.id === gk); if (!g) return '';
     const mem = g.group_members.map(m => C().find(c => c.id === m.contact_id)).filter(Boolean), net = gnet(g);
@@ -173,7 +173,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     <h3>Aspetto</h3>${seg('theme-set', t, [['system', 'Sistema'], ['light', 'Chiaro'], ['dark', 'Scuro']])}
 <h3>Impostazioni</h3><div class="card">${[['prof', 'Profilo', I.users], ['prefs', 'Preferenze', I.list], ['pwd', 'Password', I.edit], ['mail', 'Email', I.send], ['data', 'Dati e account', I.pdf]]
       .map(([k, l, i]) => `<button class="row" data-a="set:${k}">${i}<span class="grow">${l}</span></button>`).join('')}</div>
-    <a class="sub plink" href="/privacy.html" target="_blank" rel="noopener">Informativa privacy</a><button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · fase 7</p>`; };
+    <a class="sub plink" href="/privacy.html" target="_blank" rel="noopener">Informativa privacy</a><button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · v0.8</p>`; };
   const sheet = () => `<div class="grab"></div><div class="sheet-h"><h2>Notifiche</h2>${data?.notifs.some(n => !n.read_at) ? '<button class="link" data-a="readall">Segna come lette</button>' : ''}</div>
     ${data?.notifs.length ? data.notifs.map(n => `<div class="row tap" data-nid="${n.id}"><span class="grow"><b>${esc(n.title)}</b>${n.body ? `<br><span class="sub">${esc(n.body)}</span>` : ''}</span>${n.read_at ? '' : '<span class="dot s"></span>'}</div>`).join('') : '<p class="empty">Nessuna notifica.</p>'}`;
 
@@ -397,7 +397,21 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
         if (!x.ps.length) throw new Error('Scegli almeno una persona.');
         const sh = calcShares(x);
         if (sh.reduce((a, b) => a + b.amount_cents, 0) !== total || sh.some(a => !(a.amount_cents >= 0))) throw new Error('Le quote non sommano al totale.');
-        const { error } = await supabase.rpc('save_expense', { p_id: k === 'editx' ? fx.id : null, p_title: x.title.trim(), p_amount: total, p_date: x.date, p_payer: x.paid === 'me' ? null : x.paid, p_shares: sh, p_group: x.gid ?? null });
+        let gid = x.gid ?? null;   // gruppo automatico: nuova spesa con più di una persona, senza gruppo
+        if (!gid && k !== 'editx') {
+          const people = [...new Set(sh.map(s => s.contact_id).concat(x.paid === 'me' ? [] : [x.paid]).filter(Boolean))];
+          if (people.length > 1) {
+            const key = [...people].sort().join(','), same = data.groups.find(g => g.group_members.map(m => m.contact_id).sort().join(',') === key);
+            if (same) gid = same.id;
+            else {
+              const fn = people.map(id => cname(id).split(' ')[0]), label = fn.length <= 3 ? fn.join(', ') : `${fn.slice(0, 2).join(', ')} +${fn.length - 2}`;
+              const { data: g, error: ge } = await supabase.from('groups').insert({ name: label }).select('id').single(); if (ge) throw ge;
+              const { error: me } = await supabase.from('group_members').insert(people.map(c => ({ group_id: g.id, contact_id: c }))); if (me) throw me;
+              gid = g.id; ok = `Gruppo creato: ${label}`;
+            }
+          }
+        }
+        const { error } = await supabase.rpc('save_expense', { p_id: k === 'editx' ? fx.id : null, p_title: x.title.trim(), p_amount: total, p_date: x.date, p_payer: x.paid === 'me' ? null : x.paid, p_shares: sh, p_group: gid });
         if (error) throw error;
       } else {
         const amt = cents(f.amount); if (!(amt > 0)) throw new Error('Importo non valido.');

@@ -152,3 +152,18 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 .legal { font-size: .8rem; color: var(--muted); text-align: center; } .legal a, .plink { color: var(--primary); }
 .plink { display: block; text-align: center; margin-top: 14px; text-decoration: none; }
 .hero.p .net { margin-top: 6px; }
+
+/* ===== Fase 8.1: revisione estetica ===== */
+:root { --muted: #5b6b6f; }
+body { padding-top: 0; }
+.wrap { padding-top: calc(env(safe-area-inset-top) + 24px); }
+.top { margin: 0 -16px; padding: calc(env(safe-area-inset-top) + 10px) 16px 10px;
+  background: color-mix(in srgb, var(--bg) 74%, transparent); -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%); }
+.page { padding-top: 0; visibility: hidden; transition: transform .3s cubic-bezier(.2,.8,.2,1), visibility 0s linear .3s; }
+.page.open { visibility: visible; transition: transform .3s cubic-bezier(.2,.8,.2,1), visibility 0s; }
+.ptop { position: sticky; top: 0; z-index: 3; margin: 0 -16px 4px; padding: calc(env(safe-area-inset-top) + 10px) 16px 10px;
+  background: color-mix(in srgb, var(--bg) 74%, transparent); -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%); }
+.ptop b.grow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.grow { overflow-wrap: anywhere; } .row .sub { overflow-wrap: anywhere; }
+.seg button { padding: 9px 6px; font-size: .92rem; white-space: nowrap; }
+button:focus-visible, a:focus-visible, .chip:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
