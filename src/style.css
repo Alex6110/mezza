@@ -129,7 +129,7 @@ h2 { font-size: .95rem; color: var(--muted); font-weight: 600; margin: 26px 4px 
 .page { touch-action: pan-y; overscroll-behavior: contain; }
 .grab { height: 5px; margin: 8px auto 6px; }
 @keyframes rise { from { opacity: 0; transform: translateY(12px); } }
-.rise > * { animation: rise .38s cubic-bezier(.2,.8,.2,1) both; } .rise > *:nth-child(2) { animation-delay: .04s; } .rise > *:nth-child(3) { animation-delay: .08s; } .rise > *:nth-child(n+4) { animation-delay: .12s; }
+.rise > * { animation: rise .38s cubic-bezier(.2,.8,.2,1) backwards; } .rise > *:nth-child(2) { animation-delay: .04s; } .rise > *:nth-child(3) { animation-delay: .08s; } .rise > *:nth-child(n+4) { animation-delay: .12s; }
 .btn, .row.tap, .chip, .dock button, .bell, .badge, .back, .fav { transition: transform .15s, background .2s, color .2s; }
 .btn:active, .row.tap:active, .chip:active, .dock button:active, .bell:active, .badge:active, .back:active, .fav:active { transform: scale(.96); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition-duration: .01ms !important; } }
@@ -167,3 +167,27 @@ body { padding-top: 0; }
 .grow { overflow-wrap: anywhere; } .row .sub { overflow-wrap: anywhere; }
 .seg button { padding: 9px 6px; font-size: .92rem; white-space: nowrap; }
 button:focus-visible, a:focus-visible, .chip:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* ===== Fase 9: barre fisse, riepilogo che si comprime, menu ===== */
+:root { --top-h: calc(env(safe-area-inset-top) + 62px); }
+#page { --p: 0; }
+.top { box-sizing: border-box; height: var(--top-h); }
+.drawer > * { flex-shrink: 0; }
+.tools { position: sticky; top: var(--top-h); z-index: 4; margin: 0 -16px; padding: 4px 16px 10px;
+  background: color-mix(in srgb, var(--bg) 80%, transparent); -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%); }
+.tools .bar { margin: 0; } .tools .seg { margin: 10px 0 0; }
+.homebar { position: sticky; top: var(--top-h); z-index: 4; display: flex; align-items: center; margin: 0 -16px; padding: 8px 16px calc(8px - 4px * var(--p));
+  background: color-mix(in srgb, var(--bg) calc(var(--p) * 82%), transparent);
+  -webkit-backdrop-filter: blur(calc(var(--p) * 18px)) saturate(160%); backdrop-filter: blur(calc(var(--p) * 18px)) saturate(160%); }
+.homebar .hero { flex: 1; min-width: 0; margin-top: 0; gap: calc(14px - 8px * var(--p)); padding: calc(22px - 10px * var(--p)) calc(22px - 6px * var(--p)); border-radius: calc(28px - 12px * var(--p));
+  box-shadow: 0 calc(14px * (1 - var(--p))) calc(36px * (1 - var(--p))) color-mix(in srgb, var(--primary) 35%, transparent); }
+.homebar .hero strong { font-size: calc(1.7rem - .62rem * var(--p)); }
+.homebar .hero span { font-size: calc(.85rem - .1rem * var(--p)); }
+.homebar .hero .net { max-height: calc(44px * (1 - var(--p))); padding-top: calc(10px * (1 - var(--p))); opacity: calc(1 - var(--p) * 1.8); overflow: hidden; }
+.homebar .plus { flex: none; width: calc(48px * var(--p)); height: 48px; margin-left: calc(10px * var(--p)); opacity: var(--p); border: 0; border-radius: 50%;
+  background: var(--primary); color: var(--on-primary); display: grid; place-items: center; overflow: hidden; pointer-events: none; cursor: pointer; }
+.homebar.on .plus { pointer-events: auto; }
+.newfull { opacity: calc(1 - var(--p) * 2.4); }
+.homebar .plus { padding: 0; min-width: 0; }
+.sheet form > .btn.primary { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 -12px 14px -8px var(--bg); }
+.drawer h3 { margin: 16px 0 6px; } .drawer .avatar.big { width: 56px; height: 56px; margin-bottom: 4px; } .drawer .btn.danger-t { margin-top: 12px; }

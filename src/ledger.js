@@ -3,7 +3,7 @@
 import { supabase } from './supabase.js';
 
 export async function loadLedger(me) {
-  const [c, e, s, n, lr, inv, gr, cs] = await Promise.all([
+  const [c, e, s, n, lr, inv, gr, cs, rc] = await Promise.all([
     supabase.from('contacts').select('id,owner_id,name,email,phone,favorite,linked_user_id,account_deleted'),
     supabase.from('expenses')
       .select('id,title,amount_cents,spent_on,created_by,payer_contact_id,group_id,created_at,expense_shares(contact_id,amount_cents)')
@@ -14,8 +14,9 @@ export async function loadLedger(me) {
     supabase.rpc('my_invites'),
     supabase.from('groups').select('id,name,group_members(contact_id)').order('created_at', { ascending: false }),
     supabase.rpc('contact_status'),
+    supabase.from('recurring_expenses').select('id,title,amount_cents,frequency,next_due,active').order('created_at', { ascending: false }),
   ]);
-  const err = [c, e, s, n, lr, inv, gr, cs].find(r => r.error)?.error;
+  const err = [c, e, s, n, lr, inv, gr, cs, rc].find(r => r.error)?.error;
   if (err) throw err;
 
   const mine = c.data.filter(x => x.owner_id === me);
@@ -52,7 +53,7 @@ export async function loadLedger(me) {
   return {
     owed: v.filter(x => x > 0).reduce((a, b) => a + b, 0),
     owe: Math.abs(v.filter(x => x < 0).reduce((a, b) => a + b, 0)),
-    contacts: mine, bal, items, pend, expKey, exps, groups: gr.data || [], reg: new Set((cs.data || []).filter(r => r.registered).map(r => r.contact_id)), invites: inv.data || [], sent: new Map(lr.data.map(x => [x.contact_id, x.id])),
+    contacts: mine, bal, items, pend, expKey, exps, groups: gr.data || [], rec: rc.data || [], reg: new Set((cs.data || []).filter(r => r.registered).map(r => r.contact_id)), invites: inv.data || [], sent: new Map(lr.data.map(x => [x.contact_id, x.id])),
     recent: e.data.slice(0, 6).map(x => ({ ...x, delta: delta[x.id] })),
     notifs: n.data,
   };

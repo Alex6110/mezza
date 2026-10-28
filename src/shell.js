@@ -21,9 +21,11 @@ const I = {
   star: ic('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>'),
   plus: ic('<path d="M12 5v14M5 12h14"/>'), search: ic('<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/>'),
   send: ic('<path d="M4 12l16-8-6 16-3-7z"/>'), check: ic('<path d="M5 12l5 5 9-10"/>'),
+  repeat: ic('<path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/>'), trash: ic('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'),
   edit: ic('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'), pdf: ic('<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 14h6M10 17h6"/>'), book: ic('<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>'),
 };
 const TABS = [['contacts', 'Contatti', I.users], ['home', 'Home', I.home], ['consult', 'Consultazioni', I.list]];
+const FREQ = { weekly: 'ogni settimana', monthly: 'ogni mese', yearly: 'ogni anno' };
 const METHODS = ['Contanti', 'Carta', 'Satispay', 'PayPal', 'Bonifico'];
 const av = (id, n) => `<span class="avatar" style="background:hsl(${hue(id)} 45% 42%)">${esc((n || '?')[0].toUpperCase())}</span>`;
 const sg = v => !v ? '<span class="sub">In pari</span>' : `<b class="${v > 0 ? 'pos' : 'neg'}">${v > 0 ? '+' : '−'}${eur(Math.abs(v))}</b>`;
@@ -107,12 +109,12 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     ${x.delta ? `<b class="${x.delta > 0 ? 'pos' : 'neg'}">${x.delta > 0 ? '+' : '−'}${eur(Math.abs(x.delta))}</b>` : '<span class="sub">Non coinvolto</span>'}</div>`;
   const pages = {
     home: () => failed ? '<p class="empty">Impossibile caricare i dati. Controlla di aver eseguito gli script SQL.</p>' : !data ? '<p class="empty">Caricamento…</p>'
-      : `${invitesHTML()}<section class="hero"><div><span>Ti devono</span><strong>${eur(data.owed)}</strong></div><div><span>Devi dare</span><strong>${eur(data.owe)}</strong></div>
-        <p class="net">Saldo netto <b>${data.owed - data.owe < 0 ? '−' : ''}${eur(Math.abs(data.owed - data.owe))}</b></p></section>
-        <div class="acts"><button class="btn primary" data-a="newx">${I.plus}Nuova spesa</button></div><h2>Spese recenti</h2>${data.recent.length ? `<div class="card">${data.recent.map(row).join('')}</div>` : '<p class="empty">Ancora nessuna spesa condivisa.</p>'}`,
-    contacts: () => searchBar(`${'contacts' in navigator && 'ContactsManager' in window ? `<button class="btn sq" data-a="pick" aria-label="Dalla rubrica">${I.book}</button>` : ''}<button class="btn primary sq" data-a="${flt === 'groups' ? 'addg' : 'addc'}" aria-label="Nuovo">${I.plus}</button>`)
-      + seg('flt', flt, [['all', 'Tutti'], ['tel', 'Telefono'], ['mail', 'Email'], ['groups', 'Gruppi']]) + `<div id="list">${listHTML()}</div>`,
-    consult: () => searchBar(`<button class="btn sq" data-a="opdf" aria-label="Riepilogo PDF">${I.pdf}</button>`) + `<div id="list">${listHTML()}</div>`,
+      : `${invitesHTML()}<div class="homebar"><section class="hero"><div><span>Ti devono</span><strong>${eur(data.owed)}</strong></div><div><span>Devi dare</span><strong>${eur(data.owe)}</strong></div>
+        <p class="net">Saldo netto <b>${data.owed - data.owe < 0 ? '−' : ''}${eur(Math.abs(data.owed - data.owe))}</b></p></section><button class="plus" data-a="newx" aria-label="Nuova spesa">${I.plus}</button></div>
+        <div class="acts newfull"><button class="btn primary" data-a="newx">${I.plus}Nuova spesa</button></div><h2>Spese recenti</h2>${data.recent.length ? `<div class="card">${data.recent.map(row).join('')}</div>` : '<p class="empty">Ancora nessuna spesa condivisa.</p>'}`,
+    contacts: () => '<div class="tools">' + searchBar(`${'contacts' in navigator && 'ContactsManager' in window ? `<button class="btn sq" data-a="pick" aria-label="Dalla rubrica">${I.book}</button>` : ''}<button class="btn primary sq" data-a="${flt === 'groups' ? 'addg' : 'addc'}" aria-label="Nuovo">${I.plus}</button>`)
+      + seg('flt', flt, [['all', 'Tutti'], ['tel', 'Telefono'], ['mail', 'Email'], ['groups', 'Gruppi']]) + '</div>' + `<div id="list">${listHTML()}</div>`,
+    consult: () => '<div class="tools">' + searchBar(`<button class="btn sq" data-a="opdf" aria-label="Riepilogo PDF">${I.pdf}</button>`) + '</div>' + `<div id="list">${listHTML()}</div>`,
   };
 
   const invitesHTML = () => (data?.invites || []).map(i => `<div class="card inv"><div class="row"><span class="ico">${I.users}</span><span class="grow"><b>${esc(i.from_name || i.from_email)}</b><br><span class="sub">ti invita a condividere i conti</span></span></div>
@@ -171,14 +173,14 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const drawer = () => { const t = getTheme(); return `<button class="x" data-a="close" aria-label="Chiudi">${I.x}</button>
     <div class="avatar big">${esc(name[0].toUpperCase())}</div><h2 class="nm">${esc(name)}</h2><p class="sub">${esc(user.email)}</p>
     <h3>Aspetto</h3>${seg('theme-set', t, [['system', 'Sistema'], ['light', 'Chiaro'], ['dark', 'Scuro']])}
-<h3>Impostazioni</h3><div class="card">${[['prof', 'Profilo', I.users], ['prefs', 'Preferenze', I.list], ['pwd', 'Password', I.edit], ['mail', 'Email', I.send], ['data', 'Dati e account', I.pdf]]
+<h3>Impostazioni</h3><div class="card">${[['prof', 'Profilo', I.users], ['prefs', 'Preferenze', I.list], ['rec', 'Spese ricorrenti', I.repeat], ['pwd', 'Password', I.edit], ['mail', 'Email', I.send], ['data', 'Dati e account', I.pdf]]
       .map(([k, l, i]) => `<button class="row" data-a="set:${k}">${i}<span class="grow">${l}</span></button>`).join('')}</div>
     <a class="sub plink" href="/privacy.html" target="_blank" rel="noopener">Informativa privacy</a><button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · v0.8</p>`; };
   const sheet = () => `<div class="grab"></div><div class="sheet-h"><h2>Notifiche</h2>${data?.notifs.some(n => !n.read_at) ? '<button class="link" data-a="readall">Segna come lette</button>' : ''}</div>
     ${data?.notifs.length ? data.notifs.map(n => `<div class="row tap" data-nid="${n.id}"><span class="grow"><b>${esc(n.title)}</b>${n.body ? `<br><span class="sub">${esc(n.body)}</span>` : ''}</span>${n.read_at ? '' : '<span class="dot s"></span>'}</div>`).join('') : '<p class="empty">Nessuna notifica.</p>'}`;
 
   // ----- Spesa tra più persone -----
-  const newX = ps => ({ title: '', amount: '', date: today(), ps, paid: 'me', mode: pref.split === 'all' ? 'others' : 'equal', custom: {} });
+  const newX = ps => ({ title: '', amount: '', date: today(), ps, paid: 'me', mode: pref.split === 'all' ? 'others' : 'equal', custom: {}, rep: 'none' });
   const calcShares = x => {
     const total = cents(x.amount) || 0, ids = ['me', ...x.ps]; let amts;
     if (x.mode === 'custom') amts = ids.map(id => cents(x.custom[id] || '0') || 0);
@@ -193,7 +195,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     for (const [k, v] of fd) if (k.startsWith('c_')) custom[k.slice(2)] = v;
     const ps = fd.getAll('p');
     xstate = { ...xstate, title: fd.get('title') ?? xstate.title, amount: fd.get('amount') ?? xstate.amount, date: fd.get('date') || xstate.date,
-      ps, paid: fd.get('paid') || 'me', mode: fd.get('mode') || xstate.mode, custom: { ...xstate.custom, ...custom } };
+      ps, rep: fd.get('rep') || xstate.rep || 'none', paid: fd.get('paid') || 'me', mode: fd.get('mode') || xstate.mode, custom: { ...xstate.custom, ...custom } };
     if (xstate.paid !== 'me' && !ps.includes(xstate.paid)) xstate.paid = 'me';
   };
   const nmX = id => id === 'me' ? 'Io' : cname(id);
@@ -211,6 +213,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       <label>Pagato da${chips('paid', ids.map(id => [id, nmX(id)]), x.paid)}</label>
       <label>Divisione${chips('mode', [['equal', 'Parti uguali'], ['others', 'Tutto agli altri'], ['custom', 'Personalizzata']], x.mode)}</label>
       ${x.mode === 'custom' ? ids.map(id => `<label>${esc(nmX(id))}<input name="c_${id}" inputmode="decimal" placeholder="0,00" value="${esc(x.custom[id] ?? '')}"></label>`).join('') : ''}
+      ${edit ? '' : `<label>Ripeti${chips('rep', [['none', 'Mai'], ['weekly', 'Ogni settimana'], ['monthly', 'Ogni mese'], ['yearly', 'Ogni anno']], x.rep || 'none')}</label>`}
       <p class="sub" id="xsum">${sumHTML()}</p><p class="msg" id="fmsg"></p><button class="btn primary">${edit ? 'Salva modifiche' : 'Salva spesa'}</button></form>
       ${edit ? '<button class="btn danger-t del" data-a="delx">Elimina spesa</button>' : ''}`;
   };
@@ -230,6 +233,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
         <label>Persone nel gruppo<div class="chips">${C().map(c => `<label class="chip"><input type="checkbox" name="m" value="${c.id}" ${sel.has(c.id) ? 'checked' : ''}>${esc(c.name)}</label>`).join('') || '<span class="sub">Aggiungi prima dei contatti.</span>'}</div></label>`, g ? 'Salva gruppo' : 'Crea gruppo')
         + (g ? '<button class="btn danger-t del" data-a="delg">Elimina gruppo</button>' : '');
     }
+    if (form === 'rec') return `<div class="grab"></div><div class="dform"><h2>Spese ricorrenti</h2>${data.rec.length ? data.rec.map(r => `<div class="card"><div class="row"><span class="ico">${I.repeat}</span><span class="grow"><b>${esc(r.title)}</b><br><span class="sub">${eur(r.amount_cents)} · ${FREQ[r.frequency]} · ${r.active ? 'prossima il ' + dshort(r.next_due) : 'sospesa: controlla i partecipanti'}</span></span><button class="star" data-a="delrec" data-id="${r.id}" aria-label="Elimina ricorrenza">${I.trash}</button></div></div>`).join('') : '<p class="sub">Nessuna spesa ricorrente. Creane una da Nuova spesa, scegliendo Ripeti.</p>'}</div>`;
     if (form === 'editc') { const c = C().find(x => x.id === pk);
       return f('Modifica contatto', `<input name="name" value="${esc(c.name)}" required maxlength="60"><input name="email" type="email" placeholder="Email" value="${esc(c.email || '')}"><input name="phone" type="tel" placeholder="Telefono" value="${esc(c.phone || '')}">`, 'Salva')
         + '<button class="btn danger-t del" data-a="delc">Elimina contatto</button>'; }
@@ -242,14 +246,19 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const openForm = t => { form = t; armed = ''; $('#fsheet').innerHTML = formHTML(); shell.classList.remove('menu', 'notif'); shell.classList.add('form'); };
 
   const closePerson = () => { if (pk && gk) { pk = null; paint(); return; } $('#person').classList.remove('open'); pk = null; gk = null; setTimeout(paint, 320); };
+  const collapse = () => {
+    const hb = $('.homebar'); if (!hb) return;
+    const p = Math.max(0, Math.min(1, scrollY / 110)); $('#page').style.setProperty('--p', p.toFixed(3)); hb.classList.toggle('on', p > .6);
+  };
+  let raf = 0; window.onscroll = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(collapse); };
   const paint = () => {
     $('#page').innerHTML = pages[tab]();
     $('#dock').innerHTML = TABS.map(([k, l, i]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${i}${l}</button>`).join('');
     $('#drawer').innerHTML = drawer(); $('#sheet').innerHTML = sheet();
     $('#person').innerHTML = pk && data ? personHTML() : gk && data ? groupHTML() : ''; $('#person').classList.toggle('open', !!(pk || gk));
-    $('#dot').hidden = !data?.notifs.some(n => !n.read_at);
+    $('#dot').hidden = !data?.notifs.some(n => !n.read_at); collapse();
   };
-  const reload = async () => { try { data = await loadLedger(user.id); failed = false; } catch { failed = !data; } paint(); };
+  const reload = async (proc) => { if (proc) { try { await supabase.rpc('process_recurring'); } catch { /* ignora */ } } try { data = await loadLedger(user.id); failed = false; } catch { failed = !data; } paint(); };
 
   app.onclick = async e => {
     const t = e.target.closest('[data-a],[data-tab],[data-theme-set],[data-person],[data-flt],[data-psub],[data-item],[data-nid],[data-group]'), d = t?.dataset;
@@ -331,6 +340,12 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       shell.classList.remove('form'); if (d.a === 'delc') pk = null; if (d.a === 'delg') gk = null; await reload(); toast('Eliminato');
     }
     else if (d.a === 'newx') { xstate = newX(pk ? [pk] : []); openForm('expense'); }
+    else if (d.a === 'delrec') {
+      if (armed !== 'rec' + d.id) { armed = 'rec' + d.id; t.classList.add('neg'); return toast('Tocca ancora per eliminare la ricorrenza'); }
+      const { error } = await supabase.from('recurring_expenses').delete().eq('id', d.id);
+      if (error) return toast('Impossibile eliminare.');
+      await reload(); openForm('rec'); toast('Ricorrenza eliminata');
+    }
     else if (d.a === 'addg') { gk = null; openForm('group'); }
     else if (d.a === 'editg') openForm('group');
     else if (d.a === 'newg') { const g = data.groups.find(x => x.id === gk); xstate = { ...newX(g.group_members.map(m => m.contact_id)), gid: gk }; openForm('expense'); }
@@ -411,7 +426,13 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
             }
           }
         }
-        const { error } = await supabase.rpc('save_expense', { p_id: k === 'editx' ? fx.id : null, p_title: x.title.trim(), p_amount: total, p_date: x.date, p_payer: x.paid === 'me' ? null : x.paid, p_shares: sh, p_group: gid });
+        const { data: newId, error } = await supabase.rpc('save_expense', { p_id: k === 'editx' ? fx.id : null, p_title: x.title.trim(), p_amount: total, p_date: x.date, p_payer: x.paid === 'me' ? null : x.paid, p_shares: sh, p_group: gid });
+        if (error) throw error;
+        if (k !== 'editx' && x.rep && x.rep !== 'none') {
+          const r2 = await supabase.rpc('add_recurring', { p_expense: newId, p_title: x.title.trim(), p_amount: total, p_start: x.date, p_payer: x.paid === 'me' ? null : x.paid, p_shares: sh, p_group: gid, p_freq: x.rep });
+          if (r2.error) throw r2.error;
+          ok = ok === 'Salvato' ? 'Spesa salvata e ripetuta' : ok + ' · ripetuta';
+        }
         if (error) throw error;
       } else {
         const amt = cents(f.amount); if (!(amt > 0)) throw new Error('Importo non valido.');
@@ -423,13 +444,13 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     finally { btn.disabled = false; busy = false; }
   };
 
-  document.onvisibilitychange = () => { if (document.visibilityState === 'visible') reload(); };
+  document.onvisibilitychange = () => { if (document.visibilityState === 'visible') reload(true); };
   swipe($('#drawer'), 'left', () => shell.classList.remove('menu'));
   swipe($('#sheet'), 'down', () => shell.classList.remove('notif'));
   swipe($('#fsheet'), 'down', () => shell.classList.remove('form'));
   swipe($('#person'), 'right', closePerson);
   document.onkeydown = e => { if (e.key === 'Escape') shell.classList.remove('menu', 'notif', 'form'); };
-  window.ononline = () => reload();
+  window.ononline = () => reload(true);
   supabase.from('profiles').select('settings').eq('id', user.id).single().then(({ data: p }) => { if (p?.settings) pref = { ...pref, ...p.settings }; });
-  paint(); reload();
+  paint(); reload(true);
 }
