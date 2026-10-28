@@ -170,24 +170,40 @@ button:focus-visible, a:focus-visible, .chip:has(input:focus-visible) { outline:
 
 /* ===== Fase 9: barre fisse, riepilogo che si comprime, menu ===== */
 :root { --top-h: calc(env(safe-area-inset-top) + 62px); }
-#page { --p: 0; }
 .top { box-sizing: border-box; height: var(--top-h); }
 .drawer > * { flex-shrink: 0; }
 .tools { position: sticky; top: var(--top-h); z-index: 4; margin: 0 -16px; padding: 4px 16px 10px;
   background: color-mix(in srgb, var(--bg) 80%, transparent); -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%); }
 .tools .bar { margin: 0; } .tools .seg { margin: 10px 0 0; }
-.homebar { position: sticky; top: var(--top-h); z-index: 4; display: flex; align-items: center; margin: 0 -16px; padding: 8px 16px calc(8px - 4px * var(--p));
-  background: color-mix(in srgb, var(--bg) calc(var(--p) * 82%), transparent);
-  -webkit-backdrop-filter: blur(calc(var(--p) * 18px)) saturate(160%); backdrop-filter: blur(calc(var(--p) * 18px)) saturate(160%); }
-.homebar .hero { flex: 1; min-width: 0; margin-top: 0; gap: calc(14px - 8px * var(--p)); padding: calc(22px - 10px * var(--p)) calc(22px - 6px * var(--p)); border-radius: calc(28px - 12px * var(--p));
-  box-shadow: 0 calc(14px * (1 - var(--p))) calc(36px * (1 - var(--p))) color-mix(in srgb, var(--primary) 35%, transparent); }
-.homebar .hero strong { font-size: calc(1.7rem - .62rem * var(--p)); }
-.homebar .hero span { font-size: calc(.85rem - .1rem * var(--p)); }
-.homebar .hero .net { max-height: calc(44px * (1 - var(--p))); padding-top: calc(10px * (1 - var(--p))); opacity: calc(1 - var(--p) * 1.8); overflow: hidden; }
-.homebar .plus { flex: none; width: calc(48px * var(--p)); height: 48px; margin-left: calc(10px * var(--p)); opacity: var(--p); border: 0; border-radius: 50%;
-  background: var(--primary); color: var(--on-primary); display: grid; place-items: center; overflow: hidden; pointer-events: none; cursor: pointer; }
-.homebar.on .plus { pointer-events: auto; }
-.newfull { opacity: calc(1 - var(--p) * 2.4); }
-.homebar .plus { padding: 0; min-width: 0; }
 .sheet form > .btn.primary { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 -12px 14px -8px var(--bg); }
 .drawer h3 { margin: 16px 0 6px; } .drawer .avatar.big { width: 56px; height: 56px; margin-bottom: 4px; } .drawer .btn.danger-t { margin-top: 12px; }
+
+/* ===== Fase 9.1: riepilogo agganciato e menu con intestazione fissa ===== */
+.minibar { position: fixed; top: var(--top-h); left: 0; right: 0; max-width: 640px; margin: 0 auto; z-index: 4; display: flex; align-items: center; gap: 10px; padding: 6px 16px 8px;
+  background: color-mix(in srgb, var(--bg) 80%, transparent); -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%);
+  transform: translateY(-14px); opacity: 0; visibility: hidden; pointer-events: none; transition: transform .3s cubic-bezier(.2,.8,.2,1), opacity .22s, visibility 0s linear .3s; }
+.minibar.show { transform: none; opacity: 1; visibility: visible; pointer-events: auto; transition: transform .3s cubic-bezier(.2,.8,.2,1), opacity .22s, visibility 0s; }
+.msum { flex: 1; min-width: 0; display: flex; justify-content: space-between; gap: 12px; padding: 9px 16px; border-radius: 18px; color: #fff; font-size: .78rem;
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 55%, #0a1f3d)); }
+.msum span { display: grid; gap: 1px; } .msum b { font-size: 1.02rem; }
+.minibar .plus { flex: none; width: 46px; height: 46px; padding: 0; border: 0; border-radius: 50%; background: var(--primary); color: var(--on-primary); display: grid; place-items: center; cursor: pointer;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 40%, transparent); }
+.drawer { padding: 0; overflow: hidden; display: block; }
+.dhead { position: absolute; top: 0; left: 0; right: 0; z-index: 2; display: flex; align-items: center; gap: 14px; padding: calc(env(safe-area-inset-top) + 16px) 16px 14px 20px; border-radius: 0 28px 0 0;
+  background: color-mix(in srgb, var(--bg) 84%, transparent); -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%);
+  border-bottom: 1px solid transparent; transition: padding .3s cubic-bezier(.2,.8,.2,1), border-color .2s, gap .3s; }
+.dav { width: 52px; height: 52px; margin: 0; font-size: 1.3rem; flex: none; transition: width .3s cubic-bezier(.2,.8,.2,1), height .3s cubic-bezier(.2,.8,.2,1), font-size .3s; }
+.who { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.who b { font-size: 1.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: font-size .3s; }
+.mail { display: flex; align-items: center; gap: 6px; width: fit-content; max-width: 100%; padding: 4px 10px; border-radius: 99px; max-height: 28px; overflow: hidden;
+  background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); font-size: .8rem; transition: max-height .3s, opacity .2s, padding .3s; }
+.mail .i { width: 14px; height: 14px; } .mail i { font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dx { flex: none; width: 36px; height: 36px; padding: 0; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text); display: grid; place-items: center; cursor: pointer; align-self: flex-start; }
+.drawer.small .dhead { padding-top: calc(env(safe-area-inset-top) + 8px); padding-bottom: 8px; border-bottom-color: var(--border); gap: 10px; }
+.drawer.small .dav { width: 34px; height: 34px; font-size: 1rem; } .drawer.small .who b { font-size: .95rem; }
+.drawer.small .mail { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; } .drawer.small .dx { align-self: center; }
+.dbody { height: 100%; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 6px; padding: calc(env(safe-area-inset-top) + 94px) 20px 24px; }
+.dbody > * { flex-shrink: 0; }
+
+#hero, #homeacts { transition: opacity .28s ease; }
+#page.docked #hero, #page.docked #homeacts { opacity: 0; pointer-events: none; }

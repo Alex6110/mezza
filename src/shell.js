@@ -21,7 +21,7 @@ const I = {
   star: ic('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>'),
   plus: ic('<path d="M12 5v14M5 12h14"/>'), search: ic('<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/>'),
   send: ic('<path d="M4 12l16-8-6 16-3-7z"/>'), check: ic('<path d="M5 12l5 5 9-10"/>'),
-  repeat: ic('<path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/>'), trash: ic('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'),
+  mail: ic('<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 8l9 6 9-6"/>'), repeat: ic('<path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/>'), trash: ic('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'),
   edit: ic('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'), pdf: ic('<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 14h6M10 17h6"/>'), book: ic('<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>'),
 };
 const TABS = [['contacts', 'Contatti', I.users], ['home', 'Home', I.home], ['consult', 'Consultazioni', I.list]];
@@ -70,7 +70,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   app.innerHTML = `<div class="shell" id="shell">
     <header class="top"><button class="badge" data-a="menu" aria-label="Menu">${esc(name[0].toUpperCase())}</button>
       <b class="appname">${APP_NAME}</b><button class="bell" data-a="notif" aria-label="Notifiche">${I.bell}<span class="dot" id="dot" hidden></span></button></header>
-    <main id="page"></main><nav class="dock" id="dock"></nav>
+    <main id="page"></main><div class="minibar" id="minibar"></div><nav class="dock" id="dock"></nav>
     <section class="page" id="person"></section>
     <div class="scrim" data-a="close"></div><aside class="drawer" id="drawer"></aside>
     <section class="sheet" id="sheet"></section><section class="sheet" id="fsheet"></section><div class="toast" id="toast"></div></div>`;
@@ -109,9 +109,9 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     ${x.delta ? `<b class="${x.delta > 0 ? 'pos' : 'neg'}">${x.delta > 0 ? '+' : '−'}${eur(Math.abs(x.delta))}</b>` : '<span class="sub">Non coinvolto</span>'}</div>`;
   const pages = {
     home: () => failed ? '<p class="empty">Impossibile caricare i dati. Controlla di aver eseguito gli script SQL.</p>' : !data ? '<p class="empty">Caricamento…</p>'
-      : `${invitesHTML()}<div class="homebar"><section class="hero"><div><span>Ti devono</span><strong>${eur(data.owed)}</strong></div><div><span>Devi dare</span><strong>${eur(data.owe)}</strong></div>
-        <p class="net">Saldo netto <b>${data.owed - data.owe < 0 ? '−' : ''}${eur(Math.abs(data.owed - data.owe))}</b></p></section><button class="plus" data-a="newx" aria-label="Nuova spesa">${I.plus}</button></div>
-        <div class="acts newfull"><button class="btn primary" data-a="newx">${I.plus}Nuova spesa</button></div><h2>Spese recenti</h2>${data.recent.length ? `<div class="card">${data.recent.map(row).join('')}</div>` : '<p class="empty">Ancora nessuna spesa condivisa.</p>'}`,
+      : `${invitesHTML()}<section class="hero" id="hero"><div><span>Ti devono</span><strong>${eur(data.owed)}</strong></div><div><span>Devi dare</span><strong>${eur(data.owe)}</strong></div>
+        <p class="net">Saldo netto <b>${data.owed - data.owe < 0 ? '−' : ''}${eur(Math.abs(data.owed - data.owe))}</b></p></section>
+        <div class="acts" id="homeacts"><button class="btn primary" data-a="newx">${I.plus}Nuova spesa</button></div><h2>Spese recenti</h2>${data.recent.length ? `<div class="card">${data.recent.map(row).join('')}</div>` : '<p class="empty">Ancora nessuna spesa condivisa.</p>'}`,
     contacts: () => '<div class="tools">' + searchBar(`${'contacts' in navigator && 'ContactsManager' in window ? `<button class="btn sq" data-a="pick" aria-label="Dalla rubrica">${I.book}</button>` : ''}<button class="btn primary sq" data-a="${flt === 'groups' ? 'addg' : 'addc'}" aria-label="Nuovo">${I.plus}</button>`)
       + seg('flt', flt, [['all', 'Tutti'], ['tel', 'Telefono'], ['mail', 'Email'], ['groups', 'Gruppi']]) + '</div>' + `<div id="list">${listHTML()}</div>`,
     consult: () => '<div class="tools">' + searchBar(`<button class="btn sq" data-a="opdf" aria-label="Riepilogo PDF">${I.pdf}</button>`) + '</div>' + `<div id="list">${listHTML()}</div>`,
@@ -170,12 +170,12 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       ${seg('psub', psub, [['due', 'Da saldare'], ['hist', 'Storico']])}${body}`;
   };
 
-  const drawer = () => { const t = getTheme(); return `<button class="x" data-a="close" aria-label="Chiudi">${I.x}</button>
-    <div class="avatar big">${esc(name[0].toUpperCase())}</div><h2 class="nm">${esc(name)}</h2><p class="sub">${esc(user.email)}</p>
-    <h3>Aspetto</h3>${seg('theme-set', t, [['system', 'Sistema'], ['light', 'Chiaro'], ['dark', 'Scuro']])}
-<h3>Impostazioni</h3><div class="card">${[['prof', 'Profilo', I.users], ['prefs', 'Preferenze', I.list], ['rec', 'Spese ricorrenti', I.repeat], ['pwd', 'Password', I.edit], ['mail', 'Email', I.send], ['data', 'Dati e account', I.pdf]]
-      .map(([k, l, i]) => `<button class="row" data-a="set:${k}">${i}<span class="grow">${l}</span></button>`).join('')}</div>
-    <a class="sub plink" href="/privacy.html" target="_blank" rel="noopener">Informativa privacy</a><button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · v0.8</p>`; };
+  const drawer = () => { const t = getTheme(); return `<div class="dhead"><span class="avatar dav">${esc(name[0].toUpperCase())}</span>
+      <div class="who"><b>${esc(name)}</b><span class="mail">${I.mail}<i>${esc(user.email)}</i></span></div><button class="dx" data-a="close" aria-label="Chiudi">${I.x}</button></div>
+    <div class="dbody"><h3>Aspetto</h3>${seg('theme-set', t, [['system', 'Sistema'], ['light', 'Chiaro'], ['dark', 'Scuro']])}
+      <h3>Impostazioni</h3><div class="card">${[['prof', 'Profilo', I.users], ['prefs', 'Preferenze', I.list], ['rec', 'Spese ricorrenti', I.repeat], ['pwd', 'Password', I.edit], ['mail', 'Email', I.send], ['data', 'Dati e account', I.pdf]]
+        .map(([k, l, i]) => `<button class="row" data-a="set:${k}">${i}<span class="grow">${l}</span></button>`).join('')}</div>
+      <a class="sub plink" href="/privacy.html" target="_blank" rel="noopener">Informativa privacy</a><button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · v0.9</p></div>`; };
   const sheet = () => `<div class="grab"></div><div class="sheet-h"><h2>Notifiche</h2>${data?.notifs.some(n => !n.read_at) ? '<button class="link" data-a="readall">Segna come lette</button>' : ''}</div>
     ${data?.notifs.length ? data.notifs.map(n => `<div class="row tap" data-nid="${n.id}"><span class="grow"><b>${esc(n.title)}</b>${n.body ? `<br><span class="sub">${esc(n.body)}</span>` : ''}</span>${n.read_at ? '' : '<span class="dot s"></span>'}</div>`).join('') : '<p class="empty">Nessuna notifica.</p>'}`;
 
@@ -246,17 +246,22 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const openForm = t => { form = t; armed = ''; $('#fsheet').innerHTML = formHTML(); shell.classList.remove('menu', 'notif'); shell.classList.add('form'); };
 
   const closePerson = () => { if (pk && gk) { pk = null; paint(); return; } $('#person').classList.remove('open'); pk = null; gk = null; setTimeout(paint, 320); };
-  const collapse = () => {
-    const hb = $('.homebar'); if (!hb) return;
-    const p = Math.max(0, Math.min(1, scrollY / 110)); $('#page').style.setProperty('--p', p.toFixed(3)); hb.classList.toggle('on', p > .6);
+  // Riepilogo Home: quello grande scorre via; quando esce dalla vista ne compare uno compatto, fisso, con il + per la nuova spesa.
+  const miniHTML = () => !data ? '' : `<div class="msum"><span>Ti devono <b>${eur(data.owed)}</b></span><span>Devi dare <b>${eur(data.owe)}</b></span></div><button class="plus" data-a="newx" aria-label="Nuova spesa">${I.plus}</button>`;
+  const dockSummary = () => {   // soglia fissa in pixel: stesso comportamento su ogni schermo, nessuna modifica di layout durante lo scorrimento
+    const mb = $('#minibar'), pg = $('#page'); if (!mb) return;
+    if (tab !== 'home' || !data) { mb.classList.remove('show'); pg.classList.remove('docked'); return; }
+    const on = mb.classList.contains('show');
+    if (!on && scrollY > 48) { mb.classList.add('show'); pg.classList.add('docked'); }
+    else if (on && scrollY < 20) { mb.classList.remove('show'); pg.classList.remove('docked'); }
   };
-  let raf = 0; window.onscroll = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(collapse); };
+  let raf = 0; window.onscroll = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(dockSummary); };
   const paint = () => {
     $('#page').innerHTML = pages[tab]();
     $('#dock').innerHTML = TABS.map(([k, l, i]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${i}${l}</button>`).join('');
-    $('#drawer').innerHTML = drawer(); $('#sheet').innerHTML = sheet();
+    $('#drawer').innerHTML = drawer(); $('#drawer').classList.remove('small'); $('#minibar').innerHTML = miniHTML(); $('#sheet').innerHTML = sheet();
     $('#person').innerHTML = pk && data ? personHTML() : gk && data ? groupHTML() : ''; $('#person').classList.toggle('open', !!(pk || gk));
-    $('#dot').hidden = !data?.notifs.some(n => !n.read_at); collapse();
+    $('#dot').hidden = !data?.notifs.some(n => !n.read_at); dockSummary();
   };
   const reload = async (proc) => { if (proc) { try { await supabase.rpc('process_recurring'); } catch { /* ignora */ } } try { data = await loadLedger(user.id); failed = false; } catch { failed = !data; } paint(); };
 
@@ -449,6 +454,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   swipe($('#sheet'), 'down', () => shell.classList.remove('notif'));
   swipe($('#fsheet'), 'down', () => shell.classList.remove('form'));
   swipe($('#person'), 'right', closePerson);
+  $('#drawer').addEventListener('scroll', e => { if (e.target.classList?.contains('dbody')) $('#drawer').classList.toggle('small', e.target.scrollTop > 14); }, true);
   document.onkeydown = e => { if (e.key === 'Escape') shell.classList.remove('menu', 'notif', 'form'); };
   window.ononline = () => reload(true);
   supabase.from('profiles').select('settings').eq('id', user.id).single().then(({ data: p }) => { if (p?.settings) pref = { ...pref, ...p.settings }; });
