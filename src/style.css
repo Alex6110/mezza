@@ -207,3 +207,22 @@ button:focus-visible, a:focus-visible, .chip:has(input:focus-visible) { outline:
 
 #hero, #homeacts { transition: opacity .28s ease; }
 #page.docked #hero, #page.docked #homeacts { opacity: 0; pointer-events: none; }
+
+/* ===== Fase 10: morphing del riepilogo, scontrini ===== */
+.minibar { transform: none !important; }
+.ghost { position: fixed; z-index: 4; pointer-events: none; opacity: 0; top: 0; left: 0; width: 0; height: 0; background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 55%, #0a1f3d)); }
+.msum { position: relative; background: none; }
+.msum::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 55%, #0a1f3d)); opacity: 0; transition: opacity .15s; }
+.msum span { position: relative; opacity: 0; transition: opacity .15s; }
+.minibar .plus { opacity: 0; transform: scale(.6); transition: opacity .15s, transform .2s; }
+.minibar.show .msum::before { opacity: 1; transition: opacity .2s .3s; }
+.minibar.show .msum span { opacity: 1; transition: opacity .25s .32s; }
+.minibar.show .plus { opacity: 1; transform: none; transition: opacity .25s .3s, transform .35s cubic-bezier(.2,.9,.3,1.3) .3s; }
+#hero, #homeacts { transition: opacity .22s ease .14s; }
+#page.docked #hero, #page.docked #homeacts { opacity: 0; transition: opacity .12s ease; }
+.rbox { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.rbox label.btn { display: inline-flex; color: var(--text); font-size: 1rem; cursor: pointer; }
+.rimg { width: 100%; max-height: 170px; object-fit: cover; border-radius: 14px; border: 1px solid var(--border); }
+.lightbox { position: fixed; inset: 0; z-index: 11; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.88); opacity: 0; visibility: hidden; transition: opacity .25s, visibility 0s .25s; }
+.lightbox.show { opacity: 1; visibility: visible; transition: opacity .25s; }
+.lightbox img { max-width: 100%; max-height: 92dvh; border-radius: 12px; object-fit: contain; }
