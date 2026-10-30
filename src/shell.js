@@ -1,7 +1,7 @@
 // Guscio dell'app: intestazione, menu, notifiche, barra, Home, Contatti, Consultazioni e pagina persona.
 import { supabase } from './supabase.js';
 import { loadLedger } from './ledger.js';
-import { APP_NAME } from './config.js';
+import { APP_NAME, VAPID_PUBLIC_KEY } from './config.js';
 import { personPdf, overviewPdf } from './pdf.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -48,6 +48,17 @@ function openItems(its) {
 }
 
 // Chiusura con gesto: trascina il pannello verso il bordo (dir: 'down' | 'left' | 'right').
+let chan = null;   // canale in tempo reale (uno solo, anche se la schermata viene ricostruita)
+const urlB64 = s => { const r = atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...r].map(c => c.charCodeAt(0))); };
+const swReady = () => !('serviceWorker' in navigator) ? Promise.resolve(null) : Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(() => r(null), 2500))]);
+async function pushState() {
+  if (!VAPID_PUBLIC_KEY) return 'nokey';
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'unsupported';
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !navigator.standalone) return 'install';
+  if (Notification.permission === 'denied') return 'denied';
+  const reg = await swReady(); if (!reg) return 'nosw';
+  return (await reg.pushManager.getSubscription()) ? 'on' : 'off';
+}
 // Riduce la foto prima del caricamento (JPEG, lato lungo 1400 px): circa 150-250 KB invece di diversi MB.
 async function shrink(file, max = 1400, q = .72) {
   const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
@@ -73,7 +84,7 @@ const swipe = (el, dir, close) => {
 
 export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   let name = user.user_metadata?.name || user.email.split('@')[0];
-  let tab = 'home', data = null, failed = false, q = '', flt = 'all', pk = null, psub = 'due', form = null, tt, fx = null, armed = '', busy = false, pref = { split: 'half' }, xstate = null, gk = null, cflt = 'all', ghostAnim = null;
+  let tab = 'home', data = null, failed = false, q = '', flt = 'all', pk = null, psub = 'due', form = null, tt, fx = null, armed = '', busy = false, pref = { split: 'half' }, xstate = null, gk = null, cflt = 'all', ghostAnim = null, pstate = 'check';
 
   app.innerHTML = `<div class="shell" id="shell">
     <header class="top"><button class="badge" data-a="menu" aria-label="Menu">${esc(name[0].toUpperCase())}</button>
@@ -188,7 +199,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const drawer = () => { const t = getTheme(); return `<div class="dhead"><span class="avatar dav">${esc(name[0].toUpperCase())}</span>
       <div class="who"><b>${esc(name)}</b><span class="mail">${I.mail}<i>${esc(user.email)}</i></span></div><button class="dx" data-a="close" aria-label="Chiudi">${I.x}</button></div>
     <div class="dbody"><h3>Aspetto</h3>${seg('theme-set', t, [['system', 'Sistema'], ['light', 'Chiaro'], ['dark', 'Scuro']])}
-      <h3>Impostazioni</h3><div class="card">${[['prof', 'Profilo', I.users], ['prefs', 'Preferenze', I.list], ['rec', 'Spese ricorrenti', I.repeat], ['pwd', 'Password', I.edit], ['mail', 'Email', I.send], ['data', 'Dati e account', I.pdf]]
+      <h3>Impostazioni</h3><div class="card">${[['prof', 'Profilo', I.users], ['prefs', 'Preferenze', I.list], ['rec', 'Spese ricorrenti', I.repeat], ['push', 'Notifiche push', I.bell], ['pwd', 'Password', I.edit], ['mail', 'Email', I.send], ['data', 'Dati e account', I.pdf]]
         .map(([k, l, i]) => `<button class="row" data-a="set:${k}">${i}<span class="grow">${l}</span></button>`).join('')}</div>
       <a class="sub plink" href="/privacy.html" target="_blank" rel="noopener">Informativa privacy</a><button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · v0.9</p></div>`; };
   const sheet = () => `<div class="grab"></div><div class="sheet-h"><h2>Notifiche</h2>${data?.notifs.some(n => !n.read_at) ? '<button class="link" data-a="readall">Segna come lette</button>' : ''}</div>
@@ -248,6 +259,13 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       return f(g ? 'Modifica gruppo' : 'Nuovo gruppo', `<input name="name" placeholder="Nome del gruppo" required maxlength="40" value="${esc(g?.name || '')}">
         <label>Persone nel gruppo<div class="chips">${C().map(c => `<label class="chip"><input type="checkbox" name="m" value="${c.id}" ${sel.has(c.id) ? 'checked' : ''}>${esc(c.name)}</label>`).join('') || '<span class="sub">Aggiungi prima dei contatti.</span>'}</div></label>`, g ? 'Salva gruppo' : 'Crea gruppo')
         + (g ? '<button class="btn danger-t del" data-a="delg">Elimina gruppo</button>' : '');
+    }
+    if (form === 'push') {
+      const M = { check: 'Controllo…', nokey: 'Le notifiche push non sono ancora configurate su questo sito.', unsupported: 'Questo browser non supporta le notifiche push.',
+        install: 'Su iPhone le notifiche funzionano solo con l’app installata: tocca Condividi, poi “Aggiungi alla schermata Home” e riaprila da lì.',
+        denied: 'Le notifiche sono bloccate per questo sito: riattivale dalle impostazioni del telefono o del browser.', nosw: 'Disponibile solo nell’app pubblicata, non in modalità sviluppo.',
+        on: 'Le notifiche push sono attive su questo dispositivo.', off: 'Ricevi un avviso quando ti condividono una spesa, ti chiedono un saldo o accettano un tuo invito.' };
+      return `<div class="grab"></div><div class="dform"><h2>Notifiche push</h2><p class="sub">${M[pstate] || ''}</p>${pstate === 'off' ? '<button class="btn primary" data-a="push-on">Attiva su questo dispositivo</button>' : pstate === 'on' ? '<button class="btn danger-t" data-a="push-off">Disattiva su questo dispositivo</button>' : ''}</div>`;
     }
     if (form === 'rec') return `<div class="grab"></div><div class="dform"><h2>Spese ricorrenti</h2>${data.rec.length ? data.rec.map(r => `<div class="card"><div class="row"><span class="ico">${I.repeat}</span><span class="grow"><b>${esc(r.title)}</b><br><span class="sub">${eur(r.amount_cents)} · ${FREQ[r.frequency]} · ${r.active ? 'prossima il ' + dshort(r.next_due) : 'sospesa: controlla i partecipanti'}</span></span><button class="star" data-a="delrec" data-id="${r.id}" aria-label="Elimina ricorrenza">${I.trash}</button></div></div>`).join('') : '<p class="sub">Nessuna spesa ricorrente. Creane una da Nuova spesa, scegliendo Ripeti.</p>'}</div>`;
     if (form === 'editc') { const c = C().find(x => x.id === pk);
@@ -320,7 +338,28 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     else if (d.a === 'notif') { shell.classList.remove('menu'); shell.classList.add('notif'); }
     else if (d.a === 'close') shell.classList.remove('menu', 'notif', 'form');
     else if (d.a === 'back') closePerson();
-    else if (d.a === 'out') logout();
+    else if (d.a === 'out') {
+      try { const reg = await swReady(), sub = await reg?.pushManager.getSubscription(); if (sub) await supabase.rpc('remove_push_subscription', { p_endpoint: sub.endpoint }); } catch { /* ignora */ }
+      logout();
+    }
+    else if (d.a === 'set:push') { pstate = 'check'; openForm('push'); pstate = await pushState(); $('#fsheet').innerHTML = formHTML(); }
+    else if (d.a === 'push-on') {
+      try {
+        if (await Notification.requestPermission() !== 'granted') pstate = 'denied';
+        else {
+          const reg = await swReady(); if (!reg) throw new Error('sw');
+          const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(VAPID_PUBLIC_KEY) }), j = sub.toJSON();
+          const { error } = await supabase.rpc('save_push_subscription', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_ua: navigator.userAgent.slice(0, 200) });
+          if (error) throw error; pstate = 'on'; toast('Notifiche attivate');
+        }
+      } catch { toast('Impossibile attivare le notifiche.'); pstate = await pushState(); }
+      $('#fsheet').innerHTML = formHTML();
+    }
+    else if (d.a === 'push-off') {
+      try { const reg = await swReady(), sub = await reg?.pushManager.getSubscription(); if (sub) { await supabase.rpc('remove_push_subscription', { p_endpoint: sub.endpoint }); await sub.unsubscribe(); } pstate = 'off'; toast('Notifiche disattivate'); }
+      catch { toast('Impossibile disattivare.'); }
+      $('#fsheet').innerHTML = formHTML();
+    }
     else if (d.a?.startsWith('set:')) openForm(d.a.slice(4));
     else if (d.a === 'exp-json') {
       const [c, e, s] = await Promise.all([supabase.from('contacts').select('*'), supabase.from('expenses').select('*,expense_shares(*)'), supabase.from('settlements').select('*')]);
@@ -511,5 +550,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   document.onkeydown = e => { if (e.key === 'Escape') { shell.classList.remove('menu', 'notif', 'form'); $('#lightbox').classList.remove('show'); } };
   window.ononline = () => reload(true);
   supabase.from('profiles').select('settings').eq('id', user.id).single().then(({ data: p }) => { if (p?.settings) pref = { ...pref, ...p.settings }; });
+  if (chan) supabase.removeChannel(chan);
+  chan = supabase.channel('mezza-notifiche').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, () => { reload(); toast('Nuova notifica'); }).subscribe();
   paint(); reload(true);
 }

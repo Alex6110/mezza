@@ -71,10 +71,9 @@ const render = () => {
 
 // ---------- Eventi ----------
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-mode],[data-theme],[data-logout]');
+  const t = e.target.closest('[data-mode],[data-logout]');   // niente [data-theme]: l'attributo è anche su <html> quando scegli Chiaro/Scuro
   if (!t) return;
   if (t.dataset.mode) { mode = t.dataset.mode; render(); }
-  else if (t.dataset.theme) { applyTheme(t.dataset.theme); render(); }
   else { await supabase.auth.signOut(); mode = 'login'; }
 });
 
