@@ -2,6 +2,7 @@ import './style.css';
 import { supabase } from './supabase.js';
 import { APP_NAME } from './config.js';
 import { mountShell } from './shell.js';
+import { applyAccent } from './accent.js';
 
 const app = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -14,6 +15,7 @@ function applyTheme(t) {
   localStorage.setItem('mezza-theme', t);
 }
 applyTheme(getTheme());
+applyAccent();
 
 // ---------- Stato ----------
 let mode = 'login';        // login | signup | forgot | sent | recovery

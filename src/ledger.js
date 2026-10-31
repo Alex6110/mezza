@@ -49,11 +49,16 @@ export async function loadLedger(me) {
   const expKey = {};
   for (const x of e.data) expKey[x.id] = x.created_by === me ? (x.expense_shares.find(s => s.contact_id)?.contact_id ?? x.payer_contact_id) : keyOf(x.created_by);
   const exps = e.data.filter(x => x.created_by === me).map(x => ({ id: x.id, title: x.title, date: x.spent_on, ts: x.created_at, total: x.amount_cents, own: true, receipt: x.receipt_path, groupId: x.group_id, shares: x.expense_shares, payerC: x.payer_contact_id, delta: delta[x.id] }));
+  const all = e.data.map(x => {   // tutte le spese visibili, con le persone coinvolte (per filtri e ricerca)
+    const own = x.created_by === me;
+    const people = own ? [...new Set(x.expense_shares.map(s => s.contact_id).concat([x.payer_contact_id]).filter(Boolean))] : [keyOf(x.created_by)];
+    return { id: x.id, title: x.title, date: x.spent_on, ts: x.created_at, total: x.amount_cents, own, delta: delta[x.id], receipt: x.receipt_path, people };
+  });
   const v = Object.values(bal);
   return {
     owed: v.filter(x => x > 0).reduce((a, b) => a + b, 0),
     owe: Math.abs(v.filter(x => x < 0).reduce((a, b) => a + b, 0)),
-    contacts: mine, bal, items, pend, expKey, exps, groups: gr.data || [], rec: rc.data || [], reg: new Set((cs.data || []).filter(r => r.registered).map(r => r.contact_id)), invites: inv.data || [], sent: new Map(lr.data.map(x => [x.contact_id, x.id])),
+    contacts: mine, bal, items, pend, expKey, exps, all, groups: gr.data || [], rec: rc.data || [], reg: new Set((cs.data || []).filter(r => r.registered).map(r => r.contact_id)), invites: inv.data || [], sent: new Map(lr.data.map(x => [x.contact_id, x.id])),
     recent: e.data.slice(0, 6).map(x => ({ ...x, delta: delta[x.id] })),
     notifs: n.data,
   };

@@ -2,6 +2,7 @@
 import { supabase } from './supabase.js';
 import { loadLedger } from './ledger.js';
 import { APP_NAME, VAPID_PUBLIC_KEY } from './config.js';
+import { ACCENTS, getAccent, applyAccent } from './accent.js';
 import { personPdf, overviewPdf } from './pdf.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -48,7 +49,7 @@ function openItems(its) {
 }
 
 // Chiusura con gesto: trascina il pannello verso il bordo (dir: 'down' | 'left' | 'right').
-let chan = null;   // canale in tempo reale (uno solo, anche se la schermata viene ricostruita)
+let chan = null, chipObs = null;   // canale in tempo reale (uno solo, anche se la schermata viene ricostruita)
 const urlB64 = s => { const r = atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...r].map(c => c.charCodeAt(0))); };
 const swReady = () => !('serviceWorker' in navigator) ? Promise.resolve(null) : Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(() => r(null), 2500))]);
 async function pushState() {
@@ -84,7 +85,7 @@ const swipe = (el, dir, close) => {
 
 export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   let name = user.user_metadata?.name || user.email.split('@')[0];
-  let tab = 'home', data = null, failed = false, q = '', flt = 'all', pk = null, psub = 'due', form = null, tt, fx = null, armed = '', busy = false, pref = { split: 'half' }, xstate = null, gk = null, cflt = 'all', ghostAnim = null, pstate = 'check';
+  let tab = 'home', data = null, failed = false, q = '', flt = 'all', pk = null, psub = 'due', form = null, tt, fx = null, armed = '', busy = false, pref = { split: 'half' }, xstate = null, gk = null, cflt = 'all', ghostAnim = null, pstate = 'check', hq = '', hper = 'all';
 
   app.innerHTML = `<div class="shell" id="shell">
     <header class="top"><button class="badge" data-a="menu" aria-label="Menu">${esc(name[0].toUpperCase())}</button>
@@ -130,7 +131,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     home: () => failed ? '<p class="empty">Impossibile caricare i dati. Controlla di aver eseguito gli script SQL.</p>' : !data ? '<p class="empty">Caricamento…</p>'
       : `${invitesHTML()}<section class="hero" id="hero"><div><span>Ti devono</span><strong>${eur(data.owed)}</strong></div><div><span>Devi dare</span><strong>${eur(data.owe)}</strong></div>
         <p class="net">Saldo netto <b>${data.owed - data.owe < 0 ? '−' : ''}${eur(Math.abs(data.owed - data.owe))}</b></p></section>
-        <div class="acts" id="homeacts"><button class="btn primary" data-a="newx">${I.plus}Nuova spesa</button></div><h2>Spese recenti</h2>${data.recent.length ? `<div class="card">${data.recent.map(row).join('')}</div>` : '<p class="empty">Ancora nessuna spesa condivisa.</p>'}`,
+        <div class="acts" id="homeacts"><button class="btn primary" data-a="newx">${I.plus}Nuova spesa</button></div><h2>Spese</h2><div class="hf"><label class="search">${I.search}<input id="hq" placeholder="Cerca spesa o persona" value="${esc(hq)}" autocomplete="off"></label>${seg('hper', hper, [['all', 'Tutte'], ['7', '7 giorni'], ['month', 'Questo mese'], ['prev', 'Mese scorso']])}</div><div id="hlist">${homeList()}</div>`,
     contacts: () => '<div class="tools">' + searchBar(`${'contacts' in navigator && 'ContactsManager' in window ? `<button class="btn sq" data-a="pick" aria-label="Dalla rubrica">${I.book}</button>` : ''}<button class="btn primary sq" data-a="${flt === 'groups' ? 'addg' : 'addc'}" aria-label="Nuovo">${I.plus}</button>`)
       + seg('flt', flt, [['all', 'Tutti'], ['tel', 'Telefono'], ['mail', 'Email'], ['groups', 'Gruppi']]) + '</div>' + `<div id="list">${listHTML()}</div>`,
     consult: () => '<div class="tools">' + searchBar(`<button class="btn sq" data-a="opdf" aria-label="Riepilogo PDF">${I.pdf}</button>`) + seg('cflt', cflt, [['all', 'Tutte'], ['in', 'Ti devono'], ['out', 'Devi dare'], ['ok', 'In pari']]) + '</div>' + `<div id="list">${listHTML()}</div>`,
@@ -166,6 +167,21 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       <h2>Spese del gruppo</h2>${ex.length ? ex.map(x => `<div class="card xc"><div class="row tap" data-item="e:${x.id}"><span class="ico">${I.list}</span><span class="grow"><b>${esc(x.title)}</b><br><span class="sub">${dshort(x.date)} · ${eur(x.total)}</span></span>${x.receipt ? clip(x.receipt) : ''}${I.edit}</div>
         <div class="parts">${x.shares.map(h => { const id = h.contact_id ?? 'me'; return `<div class="part"><span>${esc(who(id))}${id === (x.payerC ?? 'me') ? ' · ha pagato' : ''}</span><b>${eur(h.amount_cents)}</b></div>`; }).join('')}</div></div>`).join('') : '<p class="empty">Ancora nessuna spesa nel gruppo.</p>'}`;
   };
+  // Riga con swipe a sinistra per eliminare (solo le spese create da te)
+  const swrap = (html, id, rc) => `<div class="sw can"><button class="sw-act" data-a="swdel" data-id="${id}" data-rc="${esc(rc || '')}" aria-label="Elimina">${I.trash}<span>Elimina</span></button>${html.replace('<div class="row', '<div class="sw-row row')}</div>`;
+  const homeRow = x => {
+    const html = `<div class="row"><span class="ico">${x.receipt ? I.clip : I.list}</span><span class="grow"><b>${esc(x.title)}</b><br><span class="sub">${dshort(x.date)} · ${eur(x.total)}</span></span>${x.delta ? sg(x.delta) : '<span class="sub">Non coinvolto</span>'}</div>`;
+    return x.own ? swrap(html, x.id, x.receipt) : html;
+  };
+  const homeList = () => {
+    const now = new Date(), pad = n => String(n).padStart(2, '0'), pv = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const cur = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`, prev = `${pv.getFullYear()}-${pad(pv.getMonth() + 1)}`, lim = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+    const l = data.all.filter(x => (!hq || norm(x.title).includes(norm(hq)) || x.people.some(id => norm(cname(id)).includes(norm(hq))))
+      && (hper === 'all' || (hper === '7' ? x.date >= lim : x.date.startsWith(hper === 'month' ? cur : prev)))).sort((a, b) => (b.date + b.ts).localeCompare(a.date + a.ts));
+    const shown = hq || hper !== 'all' ? l.slice(0, 60) : l.slice(0, 8);
+    return shown.length ? `<div class="card">${shown.map(homeRow).join('')}</div>${l.length > shown.length ? `<p class="sub more">Altre ${l.length - shown.length} spese: restringi la ricerca</p>` : ''}`
+      : `<p class="empty">${hq || hper !== 'all' ? 'Nessuna spesa trovata.' : 'Ancora nessuna spesa condivisa.'}</p>`;
+  };
   const clip = p => `<button class="star" data-a="rview" data-path="${esc(p)}" aria-label="Vedi scontrino">${I.clip}</button>`;
   const rbox = x => {
     const has = !!x.rurl || (x.rpath && !x.rdel);
@@ -175,8 +191,9 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   };
   const itemRow = ({ it, rem }, cn) => {
     const v = rem ?? it.v, e = it.kind === 'e';
-    return `<div class="row ${it.own ? 'tap' : ''}" ${it.own ? `data-item="${it.kind}:${it.id}"` : ''}><span class="ico">${e ? I.list : I.check}</span><span class="grow"><b>${e ? esc(it.title) : v > 0 ? 'Hai dato un saldo' : 'Hai ricevuto un saldo'}</b><br>
+    const html = `<div class="row ${it.own ? 'tap' : ''}" ${it.own ? `data-item="${it.kind}:${it.id}"` : ''}><span class="ico">${e ? I.list : I.check}</span><span class="grow"><b>${e ? esc(it.title) : v > 0 ? 'Hai dato un saldo' : 'Hai ricevuto un saldo'}</b><br>
       <span class="sub">${e ? `${it.iPaid ? 'Pagato da te' : 'Pagato da ' + esc(cn)} · ${eur(it.total)}` : esc(it.method || 'Saldo')} · ${dshort(it.date)}</span></span>${e && it.receipt ? clip(it.receipt) : ''}${sg(v)}</div>`;
+    return e && it.own ? swrap(html, it.id, it.receipt) : html;
   };
   const personHTML = () => {
     const c = C().find(x => x.id === pk); if (!c) return '';
@@ -249,7 +266,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     const f = (t, body, btn) => `<div class="grab"></div><form data-f="${form}"><h2>${t}</h2>${body}<p class="msg" id="fmsg"></p><button class="btn primary">${btn}</button></form>`, cn = esc(cname(pk));
     if (form === 'contact') return f('Nuovo contatto', '<input name="name" placeholder="Nome" required maxlength="60"><input name="email" type="email" placeholder="Email (facoltativa)"><input name="phone" type="tel" placeholder="Telefono (facoltativo)">', 'Aggiungi');
     if (form === 'prof') return f('Profilo', `<input name="name" value="${esc(name)}" required maxlength="40" placeholder="Nome visualizzato"><p class="sub">È il nome che vedono le persone collegate a te.</p>`, 'Salva');
-    if (form === 'prefs') return f('Preferenze', `<label>Divisione predefinita delle nuove spese${chips('split', [['half', 'Parti uguali'], ['all', 'Tutto agli altri']], pref.split)}</label>`, 'Salva');
+    if (form === 'prefs') return f('Preferenze', `<label>Divisione predefinita delle nuove spese${chips('split', [['half', 'Parti uguali'], ['all', 'Tutto agli altri']], pref.split)}</label><label>Colore dell’app${chips('accent', Object.entries(ACCENTS).map(([k, v]) => [k, v[0]]), getAccent())}</label>`, 'Salva');
     if (form === 'pwd') return f('Cambia password', '<input name="password" type="password" minlength="8" placeholder="Nuova password (almeno 8 caratteri)" autocomplete="new-password" required>', 'Aggiorna password');
     if (form === 'mail') return f('Cambia email', '<p class="sub">Ti mandiamo un link di conferma. Finché non lo apri, l’email di accesso resta quella attuale.</p><input name="email" type="email" placeholder="Nuovo indirizzo" required>', 'Invia conferma');
     if (form === 'data') return `<div class="grab"></div><div class="dform"><h2>Dati e account</h2><button class="btn" data-a="exp-json">Esporta tutto (JSON)</button><button class="btn" data-a="exp-csv">Esporta spese (CSV)</button><button class="btn danger-t" data-a="set:del">Elimina account…</button></div>`;
@@ -306,18 +323,19 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const reload = async (proc) => { if (proc) { try { await supabase.rpc('process_recurring'); } catch { /* ignora */ } } try { data = await loadLedger(user.id); failed = false; } catch { failed = !data; } paint(); };
 
   app.onclick = async e => {
-    const t = e.target.closest('[data-a],[data-tab],[data-theme-set],[data-person],[data-flt],[data-cflt],[data-psub],[data-item],[data-nid],[data-group]'), d = t?.dataset;
+    const t = e.target.closest('[data-a],[data-tab],[data-theme-set],[data-person],[data-flt],[data-cflt],[data-hper],[data-psub],[data-item],[data-nid],[data-group]'), d = t?.dataset;
     if (!t) return;
     if (d.tab) { tab = d.tab; q = ''; flt = 'all'; cflt = 'all'; paint(); scrollTo(0, 0); const p = $('#page'); p.classList.remove('rise'); void p.offsetWidth; p.classList.add('rise'); }
-    else if (d.themeSet) { applyTheme(d.themeSet); paint(); }
+    else if (d.themeSet) { applyTheme(d.themeSet); applyAccent(); paint(); }
     else if (d.person) { pk = d.person; psub = 'due'; paint(); }
     else if (d.flt) { flt = d.flt; paint(); }
     else if (d.cflt) { cflt = d.cflt; paint(); }
+    else if (d.hper) { hper = d.hper; paint(); }
     else if (d.psub) { psub = d.psub; paint(); }
     else if (d.nid) {
       const n = data.notifs.find(x => x.id === d.nid); n.read_at ||= 'x';
       supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', n.id).then(() => {});
-      const k = n.type === 'expense_shared' ? data.expKey[n.data?.expense_id] : n.type === 'settlement_pending' ? data.pend.find(p => !p.own)?.key : null;
+      const k = ['expense_shared', 'expense_updated'].includes(n.type) ? data.expKey[n.data?.expense_id] : n.type === 'settlement_pending' ? data.pend.find(p => !p.own)?.key : null;
       shell.classList.remove('notif');
       if (k && C().some(c => c.id === k)) { pk = k; psub = 'due'; } else tab = ['link_accepted', 'account_deleted'].includes(n.type) ? 'contacts' : 'home';
       paint();
@@ -408,6 +426,12 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       shell.classList.remove('form'); if (d.a === 'delc') pk = null; if (d.a === 'delg') gk = null; await reload(); toast('Eliminato');
     }
     else if (d.a === 'newx') { xstate = newX(pk ? [pk] : []); openForm('expense'); }
+    else if (d.a === 'swdel') {
+      const { error } = await supabase.from('expenses').delete().eq('id', d.id);
+      if (error) return toast('Impossibile eliminare.');
+      if (d.rc) supabase.storage.from('receipts').remove([d.rc]);
+      await reload(); toast('Spesa eliminata');
+    }
     else if (d.a === 'lbclose') $('#lightbox').classList.remove('show');
     else if (d.a === 'rview') {
       const { data: s, error } = await supabase.storage.from('receipts').createSignedUrl(d.path, 300);
@@ -448,10 +472,12 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   };
   const inX = el => { const fm = el.closest?.('form[data-f]'); return fm && ['expense', 'editx'].includes(fm.dataset.f) ? fm : null; };
   app.oninput = e => {
+    if (e.target.id === 'hq') { hq = e.target.value; $('#hlist').innerHTML = homeList(); return; }
     if (e.target.id === 'q') { q = e.target.value; $('#list').innerHTML = listHTML(); return; }
     const fm = inX(e.target); if (fm) { readX(fm); $('#xsum').textContent = sumHTML(); }
   };
   app.onchange = async e => {
+    if (e.target.name === 'accent') { applyAccent(e.target.value); return; }
     const fm = inX(e.target); if (!fm) return; readX(fm);
     if (e.target.id === 'rcpt') {
       const f = e.target.files?.[0]; if (!f) return;
@@ -472,7 +498,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
         const b = await supabase.from('profiles').update({ display_name: nm }).eq('id', user.id); if (b.error) throw b.error;
         name = nm; $('.badge').textContent = nm[0].toUpperCase();
       } else if (k === 'prefs') {
-        pref = { ...pref, split: f.split };
+        pref = { ...pref, split: f.split, accent: f.accent || getAccent() };
         const { error } = await supabase.from('profiles').update({ settings: pref }).eq('id', user.id); if (error) throw error;
       } else if (k === 'pwd') {
         const { error } = await supabase.auth.updateUser({ password: f.password }); if (error) throw error; ok = 'Password aggiornata';
@@ -546,10 +572,34 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   swipe($('#sheet'), 'down', () => shell.classList.remove('notif'));
   swipe($('#fsheet'), 'down', () => shell.classList.remove('form'));
   swipe($('#person'), 'right', closePerson);
+  // swipe a sinistra sulle righe eliminabili (in fase di cattura, così non scatta anche il gesto di chiusura della pagina)
+  let sx = 0, sy = 0, sel = null, mode = '';
+  const closeSw = except => app.querySelectorAll('.sw.open').forEach(x => { if (x !== except) x.classList.remove('open'); });
+  app.addEventListener('touchstart', e => {
+    const r = e.target.closest('.sw.can'); closeSw(r); sel = r; mode = ''; if (!r) return;
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+  }, { passive: true, capture: true });
+  app.addEventListener('touchmove', e => {
+    if (!sel) return;
+    const dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
+    if (!mode) { if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) mode = 'h'; else if (Math.abs(dy) > 8) mode = 'v'; else return; }
+    if (mode !== 'h') return;
+    e.stopPropagation(); e.preventDefault();
+    const row = sel.querySelector('.sw-row'), base = sel.classList.contains('open') ? -92 : 0;
+    sel._x = Math.max(-110, Math.min(0, base + dx)); row.style.transition = 'none'; row.style.transform = `translateX(${sel._x}px)`;
+  }, { passive: false, capture: true });
+  const endSw = () => {
+    if (!sel || mode !== 'h') return;
+    const row = sel.querySelector('.sw-row'); row.style.transition = ''; row.style.transform = ''; sel.classList.toggle('open', sel._x < -46); mode = '';
+  };
+  app.addEventListener('touchend', endSw, true); app.addEventListener('touchcancel', endSw, true);
   $('#drawer').addEventListener('scroll', e => { if (e.target.classList?.contains('dbody')) $('#drawer').classList.toggle('small', e.target.scrollTop > 14); }, true);
   document.onkeydown = e => { if (e.key === 'Escape') { shell.classList.remove('menu', 'notif', 'form'); $('#lightbox').classList.remove('show'); } };
   window.ononline = () => reload(true);
-  supabase.from('profiles').select('settings').eq('id', user.id).single().then(({ data: p }) => { if (p?.settings) pref = { ...pref, ...p.settings }; });
+  supabase.from('profiles').select('settings').eq('id', user.id).single().then(({ data: p }) => { if (p?.settings) pref = { ...pref, ...p.settings };
+    if (p?.settings?.accent) applyAccent(p.settings.accent); });
+  const syncChips = () => app.querySelectorAll('.chip input').forEach(i => i.closest('.chip')?.classList.toggle('on', i.checked));   // senza :has()
+  chipObs?.disconnect(); chipObs = new MutationObserver(syncChips); chipObs.observe(app, { childList: true, subtree: true }); app.addEventListener('change', syncChips);
   if (chan) supabase.removeChannel(chan);
   chan = supabase.channel('mezza-notifiche').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, () => { reload(); toast('Nuova notifica'); }).subscribe();
   paint(); reload(true);

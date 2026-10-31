@@ -12,7 +12,7 @@ self.addEventListener('fetch', e => {
 self.addEventListener('push', e => {
   const d = e.data?.json() || {};
   e.waitUntil(self.registration.showNotification(d.title || 'Mezza', {
-    body: d.body || '', icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', tag: d.tag, data: { url: d.url || '/' } }));
+    body: d.body || '', icon: '/icons/icon-192.png', badge: '/icons/badge-96.png', tag: d.tag, data: { url: d.url || '/' } }));
 });
 self.addEventListener('notificationclick', e => {
   e.notification.close();
