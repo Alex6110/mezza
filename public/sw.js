@@ -1,16 +1,20 @@
-// Service worker: cache di base per l'apertura anche senza rete + notifiche push.
-const CACHE = 'mezza-v2';
+// Service worker: apertura veloce (file dell'app in cache) + notifiche push.
+const CACHE = 'mezza-v3';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(
   caches.keys().then(k => Promise.all(k.filter(x => x !== CACHE).map(x => caches.delete(x)))).then(() => clients.claim())));
+const put = (r, res) => { const c = res.clone(); caches.open(CACHE).then(x => x.put(r, c)); return res; };
 self.addEventListener('fetch', e => {
   const r = e.request, u = new URL(r.url);
   if (r.method !== 'GET' || u.origin !== location.origin) return;           // mai la rete di Supabase
-  e.respondWith(fetch(r).then(res => { const c = res.clone(); caches.open(CACHE).then(x => x.put(r, c)); return res; })
-    .catch(() => caches.match(r).then(m => m || caches.match('/'))));
+  if (u.pathname.startsWith('/assets/')) {                                  // file con il nome "a impronta": non cambiano mai, subito dalla cache
+    e.respondWith(caches.match(r).then(m => m || fetch(r).then(res => put(r, res))));
+    return;
+  }
+  e.respondWith(fetch(r).then(res => put(r, res)).catch(() => caches.match(r).then(m => m || caches.match('/'))));
 });
 self.addEventListener('push', e => {
-  const d = e.data?.json() || {};
+  let d = {}; try { d = e.data?.json() || {}; } catch { d = { title: 'Mezza', body: e.data?.text() || '' }; }
   e.waitUntil(self.registration.showNotification(d.title || 'Mezza', {
     body: d.body || '', icon: '/icons/icon-192.png', badge: '/icons/badge-96.png', tag: d.tag, data: { url: d.url || '/' } }));
 });

@@ -12,7 +12,7 @@ Le push arrivano anche a telefono bloccato. Su iPhone servono iOS 16.4 o success
    - `WEBHOOK_SECRET` = una stringa casuale lunga (es. da terminale `openssl rand -hex 24`), la stessa che metterai nel webhook
 4. **Funzione.** Edge Functions > crea una funzione chiamata `send-push` e incolla `supabase/functions/send-push/index.ts`.
 5. **Webhook.** Database > Webhooks > crea un webhook: tabella `notifications`, evento `Insert`, tipo "Supabase Edge Functions", funzione `send-push`, metodo POST.
-   Lascia le intestazioni che propone e aggiungine una con "Add header": nome `x-webhook-secret`, valore uguale al segreto `WEBHOOK_SECRET` (punto 3).
+   Spunta solo "Insert" (non "Update"). Lascia le intestazioni che propone e aggiungine una con "Add header": nome `x-webhook-secret`, valore uguale al segreto `WEBHOOK_SECRET` (punto 3).
    Senza quel segreto la funzione risponde 403 forbidden.
 6. **Attivazione.** Esegui `patch-11.sql`, fai il push del codice, apri l'app (installata, su iPhone), menu > Notifiche push > Attiva.
 7. **Prova.** Con due account collegati, aggiungi una spesa condivisa dal primo: il secondo riceve la notifica.
@@ -21,3 +21,5 @@ Cose da sapere:
 - Il testo della notifica compare anche sul blocco schermo (es. "Nuova spesa condivisa").
 - Ogni dispositivo si attiva da solo. Uscendo dall'account, quel dispositivo smette di ricevere le notifiche di quell'utente.
 - Se non arrivano: controlla Edge Functions > send-push > Logs.
+
+8. **Controllo.** Nella funzione, Settings, disattiva il controllo JWT. Poi nell'app: menu > Notifiche push > Attiva > "Invia notifica di prova".

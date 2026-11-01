@@ -76,16 +76,16 @@ const swipe = (el, dir, close) => {
     const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0;
     const v = dir === 'down' ? dy : dir === 'left' ? -dx : dx, side = dir === 'down' ? Math.abs(dx) : Math.abs(dy);
     if (!on) { if (v > 8 && v > side && (dir !== 'down' || el.scrollTop <= 0)) { on = true; el.style.transition = 'none'; } else return; }
-    e.preventDefault(); d = Math.max(0, v);
+    d = Math.max(0, v);
     el.style.transform = dir === 'down' ? `translateY(${d}px)` : `translateX(${dir === 'left' ? -d : d}px)`;
-  }, { passive: false });
+  }, { passive: true });
   const end = () => { if (!on) return; on = false; el.style.transition = ''; el.style.transform = ''; if (d > 90) close(); };
   el.addEventListener('touchend', end); el.addEventListener('touchcancel', end);
 };
 
 export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   let name = user.user_metadata?.name || user.email.split('@')[0];
-  let tab = 'home', data = null, failed = false, q = '', flt = 'all', pk = null, psub = 'due', form = null, tt, fx = null, armed = '', busy = false, pref = { split: 'half' }, xstate = null, gk = null, cflt = 'all', ghostAnim = null, pstate = 'check', hq = '', hper = 'all';
+  let tab = 'home', data = null, failed = false, q = '', flt = 'all', pk = null, psub = 'due', form = null, tt, fx = null, armed = '', busy = false, pref = { split: 'half' }, xstate = null, gk = null, cflt = 'all', ghostAnim = null, pstate = 'check', pcount = null, swipedAt = 0, hq = '', hper = 'all';
 
   app.innerHTML = `<div class="shell" id="shell">
     <header class="top"><button class="badge" data-a="menu" aria-label="Menu">${esc(name[0].toUpperCase())}</button>
@@ -282,7 +282,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
         install: 'Su iPhone le notifiche funzionano solo con l’app installata: tocca Condividi, poi “Aggiungi alla schermata Home” e riaprila da lì.',
         denied: 'Le notifiche sono bloccate per questo sito: riattivale dalle impostazioni del telefono o del browser.', nosw: 'Disponibile solo nell’app pubblicata, non in modalità sviluppo.',
         on: 'Le notifiche push sono attive su questo dispositivo.', off: 'Ricevi un avviso quando ti condividono una spesa, ti chiedono un saldo o accettano un tuo invito.' };
-      return `<div class="grab"></div><div class="dform"><h2>Notifiche push</h2><p class="sub">${M[pstate] || ''}</p>${pstate === 'off' ? '<button class="btn primary" data-a="push-on">Attiva su questo dispositivo</button>' : pstate === 'on' ? '<button class="btn danger-t" data-a="push-off">Disattiva su questo dispositivo</button>' : ''}</div>`;
+      return `<div class="grab"></div><div class="dform"><h2>Notifiche push</h2><p class="sub">${M[pstate] || ''}</p>${pstate === 'off' ? '<button class="btn primary" data-a="push-on">Attiva su questo dispositivo</button>' : pstate === 'on' ? `<p class="sub">Dispositivi registrati sul server: ${pcount ?? '?'}</p><button class="btn primary" data-a="push-test">Invia notifica di prova</button><button class="btn danger-t" data-a="push-off">Disattiva su questo dispositivo</button>` : ''}</div>`;
     }
     if (form === 'rec') return `<div class="grab"></div><div class="dform"><h2>Spese ricorrenti</h2>${data.rec.length ? data.rec.map(r => `<div class="card"><div class="row"><span class="ico">${I.repeat}</span><span class="grow"><b>${esc(r.title)}</b><br><span class="sub">${eur(r.amount_cents)} · ${FREQ[r.frequency]} · ${r.active ? 'prossima il ' + dshort(r.next_due) : 'sospesa: controlla i partecipanti'}</span></span><button class="star" data-a="delrec" data-id="${r.id}" aria-label="Elimina ricorrenza">${I.trash}</button></div></div>`).join('') : '<p class="sub">Nessuna spesa ricorrente. Creane una da Nuova spesa, scegliendo Ripeti.</p>'}</div>`;
     if (form === 'editc') { const c = C().find(x => x.id === pk);
@@ -305,6 +305,15 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     ghostAnim?.cancel();
     ghostAnim = g.animate([{ ...f(a), borderRadius: r0, opacity: 1 }, { ...f(b), borderRadius: r1, opacity: 1, offset: .78 }, { ...f(b), borderRadius: r1, opacity: 0 }], { duration: 480, easing: 'cubic-bezier(.22,.8,.2,1)' });
   };
+  // Se il dispositivo è iscritto nel browser ma non sul server (o viceversa), lo ripara; restituisce quanti dispositivi hai registrati
+  const syncPush = async () => {
+    try {
+      const reg = await swReady(), sub = await reg?.pushManager.getSubscription();
+      if (sub) { const j = sub.toJSON(); await supabase.rpc('save_push_subscription', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_ua: navigator.userAgent.slice(0, 200) }); }
+      const { count } = await supabase.from('push_subscriptions').select('id', { count: 'exact', head: true });
+      return count ?? 0;
+    } catch { return null; }
+  };
   const dockSummary = () => {   // soglia fissa in pixel: stesso comportamento su ogni schermo, nessuna modifica di layout durante lo scorrimento
     const mb = $('#minibar'), pg = $('#page'); if (!mb) return;
     if (tab !== 'home' || !data) { mb.classList.remove('show'); pg.classList.remove('docked'); return; }
@@ -323,6 +332,9 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const reload = async (proc) => { if (proc) { try { await supabase.rpc('process_recurring'); } catch { /* ignora */ } } try { data = await loadLedger(user.id); failed = false; } catch { failed = !data; } paint(); };
 
   app.onclick = async e => {
+    if (Date.now() - swipedAt < 350) return;   // il click che segue uno swipe
+    const op = e.target.closest('.sw-row');
+    if (op && op.parentElement.classList.contains('open')) { op.parentElement.classList.remove('open'); return; }
     const t = e.target.closest('[data-a],[data-tab],[data-theme-set],[data-person],[data-flt],[data-cflt],[data-hper],[data-psub],[data-item],[data-nid],[data-group]'), d = t?.dataset;
     if (!t) return;
     if (d.tab) { tab = d.tab; q = ''; flt = 'all'; cflt = 'all'; paint(); scrollTo(0, 0); const p = $('#page'); p.classList.remove('rise'); void p.offsetWidth; p.classList.add('rise'); }
@@ -360,7 +372,11 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       try { const reg = await swReady(), sub = await reg?.pushManager.getSubscription(); if (sub) await supabase.rpc('remove_push_subscription', { p_endpoint: sub.endpoint }); } catch { /* ignora */ }
       logout();
     }
-    else if (d.a === 'set:push') { pstate = 'check'; openForm('push'); pstate = await pushState(); $('#fsheet').innerHTML = formHTML(); }
+    else if (d.a === 'set:push') { pstate = 'check'; pcount = null; openForm('push'); pstate = await pushState(); if (pstate === 'on') pcount = await syncPush(); $('#fsheet').innerHTML = formHTML(); }
+    else if (d.a === 'push-test') {
+      const { error } = await supabase.rpc('send_test_notification');
+      toast(error ? 'Impossibile inviare la prova.' : 'Prova inviata: dovrebbe arrivare entro pochi secondi');
+    }
     else if (d.a === 'push-on') {
       try {
         if (await Notification.requestPermission() !== 'granted') pstate = 'denied';
@@ -368,7 +384,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
           const reg = await swReady(); if (!reg) throw new Error('sw');
           const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(VAPID_PUBLIC_KEY) }), j = sub.toJSON();
           const { error } = await supabase.rpc('save_push_subscription', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_ua: navigator.userAgent.slice(0, 200) });
-          if (error) throw error; pstate = 'on'; toast('Notifiche attivate');
+          if (error) throw error; pstate = 'on'; pcount = await syncPush(); toast('Notifiche attivate');
         }
       } catch { toast('Impossibile attivare le notifiche.'); pstate = await pushState(); }
       $('#fsheet').innerHTML = formHTML();
@@ -573,25 +589,28 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   swipe($('#fsheet'), 'down', () => shell.classList.remove('form'));
   swipe($('#person'), 'right', closePerson);
   // swipe a sinistra sulle righe eliminabili (in fase di cattura, così non scatta anche il gesto di chiusura della pagina)
-  let sx = 0, sy = 0, sel = null, mode = '';
+  let sx = 0, sy = 0, sel = null, mode = '', t0 = 0;
   const closeSw = except => app.querySelectorAll('.sw.open').forEach(x => { if (x !== except) x.classList.remove('open'); });
-  app.addEventListener('touchstart', e => {
-    const r = e.target.closest('.sw.can'); closeSw(r); sel = r; mode = ''; if (!r) return;
-    sx = e.touches[0].clientX; sy = e.touches[0].clientY;
-  }, { passive: true, capture: true });
-  app.addEventListener('touchmove', e => {
+  const mv = e => {
     if (!sel) return;
     const dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
-    if (!mode) { if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) mode = 'h'; else if (Math.abs(dy) > 8) mode = 'v'; else return; }
+    if (!mode) { if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) { mode = 'h'; sel.classList.add('drag'); } else if (Math.abs(dy) > 8) mode = 'v'; else return; }
     if (mode !== 'h') return;
-    e.stopPropagation(); e.preventDefault();
+    e.stopPropagation();   // così non scatta anche il gesto "indietro" della pagina
     const row = sel.querySelector('.sw-row'), base = sel.classList.contains('open') ? -92 : 0;
-    sel._x = Math.max(-110, Math.min(0, base + dx)); row.style.transition = 'none'; row.style.transform = `translateX(${sel._x}px)`;
-  }, { passive: false, capture: true });
-  const endSw = () => {
-    if (!sel || mode !== 'h') return;
-    const row = sel.querySelector('.sw-row'); row.style.transition = ''; row.style.transform = ''; sel.classList.toggle('open', sel._x < -46); mode = '';
+    sel._x = Math.max(-110, Math.min(0, base + dx)); sel._v = (sel._x - base) / Math.max(1, performance.now() - t0);
+    row.style.transition = 'none'; row.style.transform = `translateX(${sel._x}px)`;
   };
+  const endSw = () => {
+    if (!sel) return; const r = sel; sel = null; r.removeEventListener('touchmove', mv);
+    if (mode !== 'h') return;
+    const row = r.querySelector('.sw-row'); row.style.transition = ''; row.style.transform = '';
+    r.classList.toggle('open', r._x < -46 || (r._v < -.5 && r._x < -20)); r.classList.remove('drag'); swipedAt = Date.now(); mode = '';
+  };
+  app.addEventListener('touchstart', e => {
+    const r = e.target.closest('.sw.can'); closeSw(r); sel = r; mode = ''; if (!r) return;
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY; t0 = performance.now(); r.addEventListener('touchmove', mv, { passive: true });
+  }, { passive: true, capture: true });
   app.addEventListener('touchend', endSw, true); app.addEventListener('touchcancel', endSw, true);
   $('#drawer').addEventListener('scroll', e => { if (e.target.classList?.contains('dbody')) $('#drawer').classList.toggle('small', e.target.scrollTop > 14); }, true);
   document.onkeydown = e => { if (e.key === 'Escape') { shell.classList.remove('menu', 'notif', 'form'); $('#lightbox').classList.remove('show'); } };

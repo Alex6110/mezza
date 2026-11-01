@@ -251,3 +251,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--primary); outli
   .top, .tools, .ptop, .minibar, .dhead { background: var(--bg); }
   .card, .bell, .dock, .search, .panel { background: var(--card-solid); }
 }
+
+/* ===== Fase 13: fluidità ===== */
+/* La sfocatura dietro a ogni scheda costa molto sui telefoni: resta solo sulle barre fisse */
+.card, .bell, .search { -webkit-backdrop-filter: none; backdrop-filter: none; }
+.card, .bell, .search { background: var(--card-solid); }
+.drawer, .sheet, .page { will-change: transform; }
+.card > .row, .card > .sw { content-visibility: auto; contain-intrinsic-size: auto 76px; }
+.hero { box-shadow: 0 10px 24px rgba(var(--primary-rgb), 0.3); }
+.sw:not(.open):not(.drag) .sw-act { visibility: hidden; }

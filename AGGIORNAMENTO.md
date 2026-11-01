@@ -1,27 +1,33 @@
 # Aggiornamento: cosa fare, in ordine
 
-Questo zip contiene TUTTO il progetto (le fasi vecchie e quelle nuove): basta usare questo.
+Questo zip contiene TUTTO il progetto. Copia i file nella tua cartella `mezza` SENZA sovrascrivere `src/config.js`
+(contiene la tua chiave VAPID pubblica: nello zip il campo è vuoto) e senza toccare la cartella nascosta `.git`.
 
-## A. Risolvere il 403 delle notifiche (5 minuti)
-1. Inventa un segreto lungo. Da terminale: `openssl rand -hex 24` (oppure una stringa casuale di almeno 30 caratteri). Copialo.
-2. Supabase > Edge Functions > Secrets: aggiungi `WEBHOOK_SECRET` con quel valore.
-3. Supabase > Edge Functions > `send-push`: sostituisci tutto il codice con quello del file `supabase/functions/send-push/index.ts` di questo zip e premi Deploy.
-4. Supabase > Database > Webhooks > `notifiche_app` > pulsante "Add header": nome `x-webhook-secret`, valore lo stesso segreto del punto 1. Lascia le altre intestazioni. Premi "Update webhook".
-5. Prova: aggiungi una spesa condivisa con un contatto collegato che ha attivato le notifiche. Se non arriva, guarda Edge Functions > send-push > Logs.
+## 1. Webhook (Supabase > Database > Webhooks > notifiche_app)
+- Spunta SOLO "Insert". Togli la spunta da "Update" (altrimenti ogni "segna come letta" manda una notifica in più).
+- Lascia le 3 intestazioni: Content-type, Authorization e x-webhook-secret (con il valore uguale al segreto WEBHOOK_SECRET).
+- "Update webhook".
 
-## B. Database
-Esegui nel SQL Editor SOLO `patch-12.sql` (testi chiari delle notifiche, avvisi per modifica/eliminazione).
-Se non avevi ancora eseguito `patch-11.sql`, esegui prima quello. Non rieseguire i patch vecchi: alcuni danno errore se ripetuti.
+## 2. Funzione (Supabase > Edge Functions > send-push)
+- Code: sostituisci tutto con `supabase/functions/send-push/index.ts` di questo zip, poi Deploy.
+- Settings della funzione: disattiva il controllo JWT ("Verify JWT"). È sicuro: la funzione rifiuta chi non ha il segreto.
+- Il test del pulsante "Send Request" della dashboard dà 403 se non aggiungi l'intestazione x-webhook-secret: è normale. Usa il test dentro l'app (punto 5).
 
-## C. App
-1. Estrai lo zip e copia i file DENTRO la cartella `mezza` che già usi (la cartella nascosta `.git` non va toccata).
-2. Dal terminale, nella cartella `mezza`: `git add .`, `git commit -m "aggiornamento"`, `git push`.
-3. Netlify pubblica da solo. Ricarica l'app un paio di volte; sul telefono chiudila e riaprila.
-4. In `src/config.js` ricontrolla che `VAPID_PUBLIC_KEY` sia la tua chiave pubblica (se hai scaricato un nuovo zip il campo è vuoto: rimetti la chiave).
+## 3. Database (SQL Editor)
+- `patch-12.sql` se non l'hai ancora eseguito (testi chiari delle notifiche, avvisi per modifica ed eliminazione).
+- `patch-13.sql` (serve al pulsante "Invia notifica di prova").
+- Non rieseguire gli altri patch.
 
-## D. Cosa c'è di nuovo
-- Notifiche con testo chiaro (chi, cosa, quanto) e avvisi per spesa modificata, eliminata e saldo annullato.
-- Swipe a sinistra per eliminare le tue spese (Home e pagina persona).
-- Ricerca e filtri per periodo in Home.
-- Colore dell'app a scelta (Impostazioni > Preferenze).
-- Correzioni per Android e browser meno recenti: niente più riquadri e sfondi che spariscono.
+## 4. App
+`git add .`, `git commit -m "aggiornamento"`, `git push`. Poi chiudi e riapri l'app sul telefono (due volte, per la cache).
+
+## 5. Prova delle notifiche
+1. Nell'app: menu > Notifiche push > Attiva (su iPhone l'app deve essere installata sulla Home).
+2. Il pannello mostra "Dispositivi registrati sul server: 1". Se mostra 0 o "?", premi Disattiva e poi Attiva.
+3. Premi "Invia notifica di prova": deve arrivare entro pochi secondi, anche con l'app chiusa e lo schermo bloccato.
+4. Se non arriva: Supabase > Edge Functions > send-push > Logs. Cosa leggere:
+   - "rifiutata: ... x-webhook-secret": l'intestazione nel webhook manca o è diversa da WEBHOOK_SECRET.
+   - "nessun dispositivo iscritto": il passo 1 non è andato a buon fine.
+   - nei dettagli, "stato: 201": il servizio delle notifiche ha accettato il messaggio (il telefono lo mostrerà).
+   - "stato: 401" o "403": la chiave pubblica in `src/config.js` NON è la stessa del segreto VAPID_PUBLIC_KEY (devono venire dalla stessa coppia di chiavi), oppure VAPID_SUBJECT non inizia con "mailto:".
+   - "stato: 404" o "410": il dispositivo non esiste più; riattiva le notifiche.
