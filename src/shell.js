@@ -306,13 +306,25 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     ghostAnim = g.animate([{ ...f(a), borderRadius: r0, opacity: 1 }, { ...f(b), borderRadius: r1, opacity: 1, offset: .78 }, { ...f(b), borderRadius: r1, opacity: 0 }], { duration: 480, easing: 'cubic-bezier(.22,.8,.2,1)' });
   };
   // Se il dispositivo è iscritto nel browser ma non sul server (o viceversa), lo ripara; restituisce quanti dispositivi hai registrati
-  const syncPush = async () => {
+  const syncPush = async () => {   // ripara l'iscrizione e restituisce quanti dispositivi hai registrati
+    try { await healPush(); const { count } = await supabase.from('push_subscriptions').select('id', { count: 'exact', head: true }); return count ?? 0; } catch { return null; }
+  };
+  // Se il dispositivo è iscritto con una chiave diversa da quella attuale, si rinnova da solo (succede se le chiavi sono cambiate)
+  const healPush = async () => {
     try {
-      const reg = await swReady(), sub = await reg?.pushManager.getSubscription();
-      if (sub) { const j = sub.toJSON(); await supabase.rpc('save_push_subscription', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_ua: navigator.userAgent.slice(0, 200) }); }
-      const { count } = await supabase.from('push_subscriptions').select('id', { count: 'exact', head: true });
-      return count ?? 0;
-    } catch { return null; }
+      if (!VAPID_PUBLIC_KEY || !('PushManager' in window) || Notification.permission !== 'granted') return;
+      const reg = await swReady(); if (!reg) return;
+      const key = urlB64(VAPID_PUBLIC_KEY); let sub = await reg.pushManager.getSubscription(); if (!sub) return;   // se non è iscritto lo decide l'utente dal menu
+      const cur = sub.options?.applicationServerKey ? new Uint8Array(sub.options.applicationServerKey) : null;
+      if (!cur || cur.length !== key.length || !cur.every((v, i) => v === key[i])) {
+        await supabase.rpc('remove_push_subscription', { p_endpoint: sub.endpoint }); await sub.unsubscribe();
+        sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      }
+      const j = sub.toJSON(); await supabase.rpc('save_push_subscription', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_ua: navigator.userAgent.slice(0, 200) });
+    } catch { /* ignora */ }
+  };
+  const setBadge = () => {   // numero di notifiche non lette sull'icona dell'app (dove supportato)
+    try { const n = data?.notifs.filter(x => !x.read_at).length || 0; if (n) navigator.setAppBadge?.(n); else navigator.clearAppBadge?.(); } catch { /* ignora */ }
   };
   const dockSummary = () => {   // soglia fissa in pixel: stesso comportamento su ogni schermo, nessuna modifica di layout durante lo scorrimento
     const mb = $('#minibar'), pg = $('#page'); if (!mb) return;
@@ -327,7 +339,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     $('#dock').innerHTML = TABS.map(([k, l, i]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${i}${l}</button>`).join('');
     $('#drawer').innerHTML = drawer(); $('#drawer').classList.remove('small'); $('#minibar').innerHTML = miniHTML(); $('#sheet').innerHTML = sheet();
     $('#person').innerHTML = pk && data ? personHTML() : gk && data ? groupHTML() : ''; $('#person').classList.toggle('open', !!(pk || gk));
-    $('#dot').hidden = !data?.notifs.some(n => !n.read_at); dockSummary();
+    $('#dot').hidden = !data?.notifs.some(n => !n.read_at); if (data) setBadge(); dockSummary();
   };
   const reload = async (proc) => { if (proc) { try { await supabase.rpc('process_recurring'); } catch { /* ignora */ } } try { data = await loadLedger(user.id); failed = false; } catch { failed = !data; } paint(); };
 
@@ -621,5 +633,6 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   chipObs?.disconnect(); chipObs = new MutationObserver(syncChips); chipObs.observe(app, { childList: true, subtree: true }); app.addEventListener('change', syncChips);
   if (chan) supabase.removeChannel(chan);
   chan = supabase.channel('mezza-notifiche').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, () => { reload(); toast('Nuova notifica'); }).subscribe();
+  healPush();
   paint(); reload(true);
 }

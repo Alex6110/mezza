@@ -31,3 +31,16 @@ Questo zip contiene TUTTO il progetto. Copia i file nella tua cartella `mezza` S
    - nei dettagli, "stato: 201": il servizio delle notifiche ha accettato il messaggio (il telefono lo mostrerà).
    - "stato: 401" o "403": la chiave pubblica in `src/config.js` NON è la stessa del segreto VAPID_PUBLIC_KEY (devono venire dalla stessa coppia di chiavi), oppure VAPID_SUBJECT non inizia con "mailto:".
    - "stato: 404" o "410": il dispositivo non esiste più; riattiva le notifiche.
+
+## 6. iPhone: "BadJwtToken" (stato 403 da web.push.apple.com)
+Significa che quella iscrizione è stata creata con una chiave diversa da quella usata per firmare. Con questo aggiornamento:
+- la funzione elimina da sola le iscrizioni rifiutate (403, 404, 410);
+- l'app, a ogni apertura, controlla l'iscrizione del dispositivo e, se la chiave non coincide, la rinnova da sola.
+Cosa fare: aggiorna la funzione (Deploy) e l'app, poi sull'iPhone apri l'app dalla Home (non da Safari), attendi qualche secondo, vai in
+menu > Notifiche push e controlla "Dispositivi registrati". Poi chiudi l'app o blocca lo schermo e dall'altro dispositivo (o con il
+pulsante di prova, subito prima di bloccare lo schermo) manda la notifica.
+Se anche dopo il rinnovo l'iPhone risponde ancora 403 BadJwtToken, cambia il segreto VAPID_SUBJECT in `https://mezza-app.netlify.app`
+(Apple accetta anche un indirizzo https) e riprova.
+
+## 7. Badge sull'icona
+Il numero di notifiche non lette compare sull'icona dell'app installata (iPhone con iOS 16.4 o successivo, e Android). Si azzera quando le leggi.

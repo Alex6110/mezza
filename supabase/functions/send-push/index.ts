@@ -31,8 +31,9 @@ Deno.serve(async req => {
     if (e1) { console.log('errore nella lettura dei dispositivi:', e1.message); return json({ errore: 'lettura dispositivi: ' + e1.message }, 500); }
     if (!subs?.length) { console.log('nessun dispositivo iscritto per questo utente'); return json({ inviate: 0, motivo: 'nessun dispositivo iscritto' }); }
 
+    const { count } = await admin.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', record.user_id).is('read_at', null);
     webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT')!, Deno.env.get('VAPID_PUBLIC_KEY')!, Deno.env.get('VAPID_PRIVATE_KEY')!);
-    const payload = JSON.stringify({ title: record.title, body: record.body || '', tag: record.id || record.type, url: '/' });
+    const payload = JSON.stringify({ title: record.title, body: record.body || '', tag: record.id || record.type, url: '/', badge: count ?? undefined });
     const res = await Promise.allSettled(subs.map(s =>
       webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 86400, urgency: 'high' })));
 
@@ -41,8 +42,8 @@ Deno.serve(async req => {
       : { ok: false, stato: (r.reason as { statusCode?: number })?.statusCode, errore: String((r.reason as { body?: string })?.body || (r.reason as Error)?.message || r.reason).slice(0, 200), servizio: new URL(subs[i].endpoint).host });
     console.log(JSON.stringify(dettagli));
 
-    // dispositivi che non esistono più (app disinstallata, permesso revocato): li togliamo
-    const dead = subs.filter((_, i) => [404, 410].includes(dettagli[i].stato ?? 0)).map(s => s.id);
+    // dispositivi che non esistono più o iscritti con una chiave vecchia (404, 410, 403): li togliamo; l'app li riscrive da sola alla prossima apertura
+    const dead = subs.filter((_, i) => [403, 404, 410].includes(dettagli[i].stato ?? 0)).map(s => s.id);
     if (dead.length) await admin.from('push_subscriptions').delete().in('id', dead);
     return json({ inviate: dettagli.filter(d => d.ok).length, rimosse: dead.length, dettagli });
   } catch (e) { console.log('errore:', String(e)); return json({ errore: String(e) }, 500); }

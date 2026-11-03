@@ -15,8 +15,10 @@ self.addEventListener('fetch', e => {
 });
 self.addEventListener('push', e => {
   let d = {}; try { d = e.data?.json() || {}; } catch { d = { title: 'Mezza', body: e.data?.text() || '' }; }
-  e.waitUntil(self.registration.showNotification(d.title || 'Mezza', {
-    body: d.body || '', icon: '/icons/icon-192.png', badge: '/icons/badge-96.png', tag: d.tag, data: { url: d.url || '/' } }));
+  e.waitUntil(Promise.all([
+    self.registration.showNotification(d.title || 'Mezza', { body: d.body || '', icon: '/icons/icon-192.png', badge: '/icons/badge-96.png', tag: d.tag, data: { url: d.url || '/' } }),
+    d.badge != null && self.navigator.setAppBadge ? self.navigator.setAppBadge(d.badge).catch(() => {}) : null,   // numero sull'icona dell'app
+  ]));
 });
 self.addEventListener('notificationclick', e => {
   e.notification.close();
