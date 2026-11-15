@@ -3,4 +3,4 @@ export const SUPABASE_URL = 'https://ahqumzeswpuarevnshaj.supabase.co';
 // Chiave pubblica "anon": è fatta per stare nel codice, i dati sono protetti dall'RLS.
 export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFocXVtemVzd3B1YXJldm5zaGFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI5NjM0OTAsImV4cCI6MjEwODUzOTQ5MH0.hY3QTzyIPS-AKJ7RvCFKV4rla36DWHarQ-rmGc2ujD0';
 // Chiave pubblica per le notifiche push (vedi supabase/push-setup.md). Vuota = push non ancora configurate.
-export const VAPID_PUBLIC_KEY = 'BFglk3VG7ri26kagKlAKUOv0aRwBCBsBjXySs6QPBj-SeD97SLSPztpS9oQcWb9JOCAWc1J83y4lf5wBtEU3rUA';
+export const VAPID_PUBLIC_KEY = 'BF-58M0pEoo7_asvTvrZoPDkV6Lbfu_-lCnAbZ5Sg5rdmqse7g4RF8SD8_u86DYYeoxSHhUPUNObbZdvvYORsa8';
