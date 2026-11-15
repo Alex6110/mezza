@@ -33,7 +33,7 @@ Deno.serve(async req => {
 
     const { count } = await admin.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', record.user_id).is('read_at', null);
     webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT')!, Deno.env.get('VAPID_PUBLIC_KEY')!, Deno.env.get('VAPID_PRIVATE_KEY')!);
-    const payload = JSON.stringify({ title: record.title, body: record.body || '', tag: record.id || record.type, url: '/', badge: count ?? undefined });
+    const payload = JSON.stringify({ title: record.title, body: record.body || '', tag: record.id || record.type, url: `/?n=${record.id}`, nid: record.id, badge: count ?? undefined });
     const res = await Promise.allSettled(subs.map(s =>
       webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 86400, urgency: 'high' })));
 

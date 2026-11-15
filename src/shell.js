@@ -358,7 +358,20 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     $('#person').innerHTML = pk && data ? personHTML() : gk && data ? groupHTML() : ''; $('#person').classList.toggle('open', !!(pk || gk));
     $('#dot').hidden = !data?.notifs.some(n => !n.read_at); if (data) setBadge(); dockSummary();
   };
-  const reload = async (proc) => { if (proc) { try { await supabase.rpc('process_recurring'); } catch { /* ignora */ } } try { data = await loadLedger(user.id); failed = false; } catch { failed = !data; } paint(); };
+  // Apre la pagina collegata a una notifica (usata dal tocco in app e dal tocco sulla notifica push)
+  const openNotif = nid => {
+    const n = data?.notifs.find(x => x.id === nid); if (!n) return false;
+    if (!n.read_at) { n.read_at = 'x'; supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', n.id).then(() => {}); }
+    const k = ['expense_shared', 'expense_updated'].includes(n.type) ? data.expKey[n.data?.expense_id] : n.type === 'settlement_pending' ? data.pend.find(p => !p.own)?.key : null;
+    shell.classList.remove('notif', 'menu', 'form'); closeSw?.(null);
+    if (k && C().some(c => c.id === k)) { pk = k; psub = 'due'; } else { pk = null; tab = ['link_accepted', 'account_deleted'].includes(n.type) ? 'contacts' : 'home'; }
+    paint(); return true;
+  };
+  let wantN = new URLSearchParams(location.search).get('n');   // apertura da notifica push ad app chiusa
+  if (wantN) history.replaceState(null, '', location.pathname);
+  navigator.serviceWorker?.addEventListener('message', e => { if (e.data?.type === 'open-notif') { wantN = e.data.nid; reload().then(() => tryWant()); } });
+  const tryWant = () => { if (wantN && data && openNotif(wantN)) wantN = null; };
+  const reload = async (proc) => { if (proc) { try { await supabase.rpc('process_recurring'); } catch { /* ignora */ } } try { data = await loadLedger(user.id); failed = false; } catch { failed = !data; } paint(); tryWant(); };
 
   app.onclick = async e => {
     if (Date.now() - swipedAt < 350) return;   // il click che segue uno swipe
@@ -373,14 +386,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     else if (d.cflt) { cflt = d.cflt; paint(); }
     else if (d.hper) { hper = d.hper; paint(); }
     else if (d.psub) { psub = d.psub; paint(); }
-    else if (d.nid) {
-      const n = data.notifs.find(x => x.id === d.nid); n.read_at ||= 'x';
-      supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', n.id).then(() => {});
-      const k = ['expense_shared', 'expense_updated'].includes(n.type) ? data.expKey[n.data?.expense_id] : n.type === 'settlement_pending' ? data.pend.find(p => !p.own)?.key : null;
-      shell.classList.remove('notif');
-      if (k && C().some(c => c.id === k)) { pk = k; psub = 'due'; } else tab = ['link_accepted', 'account_deleted'].includes(n.type) ? 'contacts' : 'home';
-      paint();
-    }
+    else if (d.nid) openNotif(d.nid);
     else if (d.group) { gk = d.group; paint(); }
     else if (d.item) {
       const [k, id] = d.item.split(':'); fx = (data.items[pk] || []).find(i => i.kind === k && i.id === id) || data.exps.find(i => i.id === id);

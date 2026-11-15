@@ -1,5 +1,5 @@
 // Service worker: apertura veloce (file dell'app in cache) + notifiche push.
-const CACHE = 'mezza-v3';
+const CACHE = 'mezza-v4';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(
   caches.keys().then(k => Promise.all(k.filter(x => x !== CACHE).map(x => caches.delete(x)))).then(() => clients.claim())));
@@ -16,15 +16,16 @@ self.addEventListener('fetch', e => {
 self.addEventListener('push', e => {
   let d = {}; try { d = e.data?.json() || {}; } catch { d = { title: 'Mezza', body: e.data?.text() || '' }; }
   e.waitUntil(Promise.all([
-    self.registration.showNotification(d.title || 'Mezza', { body: d.body || '', icon: '/icons/icon-192.png', badge: '/icons/badge-96.png', tag: d.tag, data: { url: d.url || '/' } }),
+    self.registration.showNotification(d.title || 'Mezza', { body: d.body || '', icon: '/icons/icon-192.png', badge: '/icons/badge-96.png', tag: d.tag, data: { url: d.url || '/', nid: d.nid } }),
     d.badge != null && self.navigator.setAppBadge ? self.navigator.setAppBadge(d.badge).catch(() => {}) : null,   // numero sull'icona dell'app
   ]));
 });
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const url = e.notification.data?.url || '/';
+  const url = e.notification.data?.url || '/', nid = e.notification.data?.nid;
   e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(l => {
     const w = l.find(c => 'focus' in c);
-    return w ? w.focus() : clients.openWindow(url);
+    if (w) { w.postMessage({ type: 'open-notif', nid }); return w.focus(); }   // app già aperta: le diciamo dove andare
+    return clients.openWindow(url);                                            // app chiusa: si apre già sulla pagina giusta
   }));
 });
