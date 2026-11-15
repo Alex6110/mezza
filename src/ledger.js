@@ -2,13 +2,20 @@
 // Saldo con una persona: > 0 = ti deve, < 0 = devi dare.
 import { supabase } from './supabase.js';
 
+// Legge i saldi; se la colonna expense_id non esiste ancora (patch-14.sql non eseguito) ripiega sulla lettura di prima.
+async function settlementsQuery() {
+  const base = 'id,created_by,contact_id,direction,amount_cents,status,method,settled_on,created_at';
+  const r = await supabase.from('settlements').select(base + ',expense_id');
+  return r.error ? supabase.from('settlements').select(base) : r;
+}
+
 export async function loadLedger(me) {
   const [c, e, s, n, lr, inv, gr, cs, rc] = await Promise.all([
     supabase.from('contacts').select('id,owner_id,name,email,phone,favorite,linked_user_id,account_deleted'),
     supabase.from('expenses')
       .select('id,title,amount_cents,spent_on,created_by,payer_contact_id,group_id,receipt_path,created_at,expense_shares(contact_id,amount_cents)')
       .order('spent_on', { ascending: false }).order('created_at', { ascending: false }),
-    supabase.from('settlements').select('id,created_by,contact_id,direction,amount_cents,status,method,settled_on,created_at'),
+    settlementsQuery(),
     supabase.from('notifications').select('id,type,data,title,body,created_at,read_at').order('created_at', { ascending: false }).limit(30),
     supabase.from('link_requests').select('id,contact_id').eq('from_user', me).eq('status', 'pending'),
     supabase.rpc('my_invites'),
@@ -44,7 +51,7 @@ export async function loadLedger(me) {
     if (t.status === 'pending') pend.push({ id: t.id, own, key: own ? t.contact_id : keyOf(t.created_by), amount: t.amount_cents, dir: t.direction, v: (own ? t.direction === 'paid' : t.direction === 'received') ? t.amount_cents : -t.amount_cents });
     if (t.status !== 'confirmed') continue;
     const iGave = own ? t.direction === 'paid' : t.direction === 'received';
-    add(own ? t.contact_id : keyOf(t.created_by), iGave ? t.amount_cents : -t.amount_cents, { kind: 's', id: t.id, own, method: t.method, date: t.settled_on, ts: t.created_at });
+    add(own ? t.contact_id : keyOf(t.created_by), iGave ? t.amount_cents : -t.amount_cents, { kind: 's', id: t.id, own, method: t.method, date: t.settled_on, ts: t.created_at, target: t.expense_id || null });
   }
   const expKey = {};
   for (const x of e.data) expKey[x.id] = x.created_by === me ? (x.expense_shares.find(s => s.contact_id)?.contact_id ?? x.payer_contact_id) : keyOf(x.created_by);

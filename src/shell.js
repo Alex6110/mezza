@@ -35,15 +35,22 @@ const seg = (attr, cur, arr) => `<div class="seg">${arr.map(([k, l]) => `<button
 
 // Spese ancora aperte: i pagamenti compensano le voci più vecchie (FIFO).
 function openItems(its) {
-  const o = [];
-  for (const it of [...its].sort((a, b) => (a.date + a.ts).localeCompare(b.date + b.ts))) {
-    let v = it.v;
+  // I saldi legati a una spesa (target) riducono solo quella spesa; gli altri pareggiano dalla più vecchia.
+  const tg = {}, base = [], o = [];
+  for (const it of its) { if (it.kind === 's' && it.target) tg[it.target] = (tg[it.target] || 0) + it.v; else base.push(it); }
+  const feed = (it, v) => {
     while (v && o.length && Math.sign(o[0].rem) !== Math.sign(v)) {
       const t = Math.min(Math.abs(v), Math.abs(o[0].rem));
       o[0].rem += Math.sign(v) * t; v -= Math.sign(v) * t;
       if (!o[0].rem) o.shift();
     }
     if (v) o.push({ it, rem: v });
+  };
+  for (const it of [...base].sort((a, b) => (a.date + a.ts).localeCompare(b.date + b.ts))) {
+    let v = it.v, a = it.kind === 'e' ? tg[it.id] || 0 : 0;
+    if (a && Math.sign(a) !== Math.sign(v)) { const t = Math.min(Math.abs(a), Math.abs(v)); v -= Math.sign(v) * t; a += Math.sign(it.v) * t; }
+    feed(it, v);
+    if (a) feed(it, a);   // eventuale eccedenza di un saldo legato: si comporta come un saldo normale
   }
   return o;
 }
@@ -96,6 +103,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     <section class="sheet" id="sheet"></section><section class="sheet" id="fsheet"></section><div class="toast" id="toast"></div></div>`;
   const $ = s => app.querySelector(s), shell = $('#shell');
   const toast = t => { const e = $('#toast'); e.textContent = t; e.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => e.classList.remove('show'), 2600); };
+  let sset = null;   // saldo di una singola spesa: { c: contatto, rem: centesimi ancora da saldare }
   const C = () => data?.contacts || [], bal = id => data?.bal[id] || 0, cname = id => C().find(c => c.id === id)?.name || '?';
   const eff = id => bal(id) + (data?.pend || []).filter(p => p.key === id).reduce((s, p) => s + p.v, 0);   // saldo al netto dei saldi in attesa
   const gone = c => !!c?.account_deleted && !data.reg.has(c.id);   // account Mezza eliminato
@@ -170,7 +178,8 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   // Riga con swipe a sinistra per eliminare (solo le spese create da te)
   const swrap = (html, id, rc) => `<div class="sw can"><button class="sw-act" data-a="swdel" data-id="${id}" data-rc="${esc(rc || '')}" aria-label="Elimina">${I.trash}<span>Elimina</span></button>${html.replace('<div class="row', '<div class="sw-row row')}</div>`;
   const homeRow = x => {
-    const html = `<div class="row"><span class="ico">${x.receipt ? I.clip : I.list}</span><span class="grow"><b>${esc(x.title)}</b><br><span class="sub">${dshort(x.date)} · ${eur(x.total)}</span></span>${x.delta ? sg(x.delta) : '<span class="sub">Non coinvolto</span>'}</div>`;
+    const pc = !x.own && x.people[0] && C().some(c => c.id === x.people[0]) ? x.people[0] : '';
+    const html = `<div class="row tap" ${x.own ? `data-item="e:${x.id}"` : pc ? `data-person="${pc}"` : ''}><span class="ico">${x.receipt ? I.clip : I.list}</span><span class="grow"><b>${esc(x.title)}</b><br><span class="sub">${dshort(x.date)} · ${eur(x.total)}</span></span>${x.delta ? sg(x.delta) : '<span class="sub">Non coinvolto</span>'}</div>`;
     return x.own ? swrap(html, x.id, x.receipt) : html;
   };
   const homeList = () => {
@@ -247,6 +256,11 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     const sh = calcShares(xstate), sum = sh.reduce((a, b) => a + b.amount_cents, 0);
     return sh.map(a => `${esc(nmX(a.contact_id ?? 'me'))} ${eur(a.amount_cents)}`).join(' · ') + (sum !== total ? ` — assegnato ${eur(sum)} su ${eur(total)}` : '');
   };
+  const remFor = id => C().map(c => { const o = openItems(data.items[c.id] || []).find(x => x.it.kind === 'e' && x.it.id === id); return o ? { c, rem: o.rem } : null; }).filter(Boolean);
+  const settleOneHTML = () => {
+    const l = fx?.id ? remFor(fx.id) : [];
+    return l.length ? `<h2>Saldo di questa spesa</h2><div class="card">${l.map(r => `<div class="row"><span class="grow"><b>${esc(r.c.name)}</b><br><span class="sub">${r.rem > 0 ? 'Ti deve' : 'Devi dare'} ${eur(Math.abs(r.rem))}</span></span><button class="btn" data-a="sets" data-c="${r.c.id}">${I.check}Salda solo questa</button></div>`).join('')}</div>` : '';
+  };
   const xFormHTML = () => {
     const x = xstate, ids = ['me', ...x.ps], edit = form === 'editx';
     return `<div class="grab"></div><form data-f="${form}"><h2>${edit ? 'Modifica spesa' : 'Nuova spesa'}</h2>
@@ -259,6 +273,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       ${edit ? '' : `<label>Ripeti${chips('rep', [['none', 'Mai'], ['weekly', 'Ogni settimana'], ['monthly', 'Ogni mese'], ['yearly', 'Ogni anno']], x.rep || 'none')}</label>`}
       ${rbox(x)}
       <p class="sub" id="xsum">${sumHTML()}</p><p class="msg" id="fmsg"></p><button class="btn primary">${edit ? 'Salva modifiche' : 'Salva spesa'}</button></form>
+      ${edit ? settleOneHTML() : ''}
       ${edit ? '<button class="btn danger-t del" data-a="delx">Elimina spesa</button>' : ''}`;
   };
 
@@ -289,6 +304,8 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       return f('Modifica contatto', `<input name="name" value="${esc(c.name)}" required maxlength="60"><input name="email" type="email" placeholder="Email" value="${esc(c.email || '')}"><input name="phone" type="tel" placeholder="Telefono" value="${esc(c.phone || '')}">`, 'Salva')
         + '<button class="btn danger-t del" data-a="delc">Elimina contatto</button>'; }
     if (form === 'dels') return `<div class="grab"></div><div class="dform"><h2>Saldo del ${dshort(fx.date)}</h2><p class="sub">${esc(fx.method || 'Saldo')} · ${eur(Math.abs(fx.v))}</p><button class="btn danger-t" data-a="delx">Elimina saldo</button></div>`;
+    if (form === 'sets') { const b = sset.rem; return f(`Salda “${esc(fx.title)}”`, `<p class="sub">con ${esc(sset.c.name)} · ${b > 0 ? 'Ti deve' : 'Devi dare'} ${eur(Math.abs(b))} per questa spesa</p><input name="amount" inputmode="decimal" value="${(Math.abs(b) / 100).toFixed(2).replace('.', ',')}" required>
+      <label>Metodo${chips('method', METHODS.map(m => [m, m]), 'Contanti')}</label>`, 'Segna come saldato'); }
     if (form === 'expense' || form === 'editx') return xFormHTML();
     const b = eff(pk);
     return f(`Salda con ${cn}`, `<p class="sub">${b > 0 ? `Ti deve ${eur(b)}` : `Devi dare ${eur(-b)}`}</p><input name="amount" inputmode="decimal" value="${(Math.abs(b) / 100).toFixed(2).replace('.', ',')}" required>
@@ -480,6 +497,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     else if (d.a === 'editg') openForm('group');
     else if (d.a === 'newg') { const g = data.groups.find(x => x.id === gk); xstate = { ...newX(g.group_members.map(m => m.contact_id)), gid: gk }; openForm('expense'); }
     else if (d.a === 'settle') openForm('settle');
+    else if (d.a === 'sets') { const r = remFor(fx.id).find(x => x.c.id === d.c); if (!r) return toast('Niente da saldare per questa spesa.'); sset = r; openForm('sets'); }
     else if (d.a === 'readall') {
       await supabase.from('notifications').update({ read_at: new Date().toISOString() }).is('read_at', null);
       data.notifs.forEach(n => (n.read_at ||= 'x')); paint();
@@ -585,6 +603,10 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
           } catch { ok = 'Spesa salvata, ma lo scontrino non è stato caricato'; }
         }
         if (error) throw error;
+      } else if (k === 'sets') {
+        const amt = cents(f.amount); if (!(amt > 0)) throw new Error('Importo non valido.');
+        if (amt > Math.abs(sset.rem)) throw new Error('L’importo supera quanto resta da saldare.');
+        const { error } = await supabase.from('settlements').insert({ contact_id: sset.c.id, direction: sset.rem > 0 ? 'received' : 'paid', amount_cents: amt, method: f.method, expense_id: fx.id }); if (error) throw error;
       } else {
         const amt = cents(f.amount); if (!(amt > 0)) throw new Error('Importo non valido.');
         if (amt > Math.abs(eff(pk))) throw new Error('L’importo supera il saldo da pareggiare.');
