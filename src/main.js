@@ -65,8 +65,14 @@ function homeView() {
     <button class="btn" data-logout>Esci</button></div>`;
 }
 
+// Modalità offline: ricordiamo l'utente per poter aprire l'app senza rete (i dati arrivano dall'ultima copia salvata)
+const OFF_KEY = 'mezza-offline-user';
+const readOffline = () => { try { return JSON.parse(localStorage.getItem(OFF_KEY)); } catch { return null; } };
+const clearOffline = () => { Object.keys(localStorage).filter(k => k.startsWith('mezza-snap-') || k === OFF_KEY).forEach(k => localStorage.removeItem(k)); };
+
 const render = () => {
-  if (user && mode !== 'recovery') return mountShell(app, user, { applyTheme, getTheme, logout: () => supabase.auth.signOut() });
+  if (user && !user.offline) { try { localStorage.setItem(OFF_KEY, JSON.stringify({ id: user.id, email: user.email, user_metadata: { name: user.user_metadata?.name } })); } catch { /* ignora */ } }
+  if (user && mode !== 'recovery') return mountShell(app, user, { applyTheme, getTheme, logout: () => { clearOffline(); return supabase.auth.signOut(); } });
   app.onclick = null;
   app.innerHTML = `<div class="wrap"><section class="panel">${authView()}</section></div>`;
 };
@@ -106,11 +112,15 @@ document.addEventListener('submit', async e => {
 });
 
 supabase.auth.onAuthStateChange((event, session) => {
+  if (!session && user?.offline && !navigator.onLine) return;   // senza rete restiamo in modalità offline
+  if (event === 'SIGNED_OUT') clearOffline();
   if (event === 'PASSWORD_RECOVERY') mode = 'recovery';
   else if (mode !== 'recovery' && session?.user?.id === user?.id) { user = session?.user ?? null; return; } // rinnovo token: niente ridisegno
   user = session?.user ?? null;
   render();
 });
 render();
+setTimeout(() => { if (!user && !navigator.onLine) { const u = readOffline(); if (u) { user = { ...u, offline: true }; render(); } } }, 1200);
+addEventListener('online', () => { if (user?.offline) location.reload(); });
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('/sw.js');

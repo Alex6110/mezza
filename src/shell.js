@@ -102,7 +102,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   app.innerHTML = `<div class="shell" id="shell">
     <header class="top"><button class="badge" data-a="menu" aria-label="Menu">${esc(name[0].toUpperCase())}</button>
       <b class="appname">${APP_NAME}</b><button class="bell" data-a="notif" aria-label="Notifiche">${I.bell}<span class="dot" id="dot" hidden></span></button></header>
-    <main id="page"></main><div class="minibar" id="minibar"></div><div class="ghost" id="ghost"></div><div class="lightbox" id="lightbox" data-a="lbclose"></div><nav class="dock" id="dock"></nav>
+    <main id="page"></main><div class="minibar" id="minibar"></div><div class="offbar" id="offbar" hidden></div><div class="ghost" id="ghost"></div><div class="lightbox" id="lightbox" data-a="lbclose"></div><nav class="dock" id="dock"></nav>
     <section class="page" id="person"></section>
     <div class="scrim" data-a="close"></div><aside class="drawer" id="drawer"></aside>
     <section class="sheet" id="sheet"></section><section class="sheet" id="fsheet"></section><div class="toast" id="toast"></div></div>`;
@@ -114,6 +114,12 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       const o = openItems(its).find(x => x.it.kind === 'e' && x.it.id === id), rem = o ? Math.abs(o.rem) : 0;
       if (Math.abs(it.v) - rem > 0) any = true; if (rem) full = false; }
     return { any, full }; };
+  let offline = false, lastOk = 0;
+  const SNAP = 'mezza-snap-' + user.id;
+  const saveSnap = () => { try { localStorage.setItem(SNAP, JSON.stringify({ ts: lastOk, data: { ...data, reg: [...data.reg], sent: [...data.sent] } })); } catch { /* spazio pieno: ignora */ } };
+  const loadSnap = () => { try { const x = JSON.parse(localStorage.getItem(SNAP)); return x?.data ? { ts: x.ts, data: { ...x.data, reg: new Set(x.data.reg), sent: new Map(x.data.sent) } } : null; } catch { return null; } };
+  const showOff = () => { const o = $('#offbar'); if (!o) return; o.hidden = !offline; o.textContent = offline ? 'Sei offline · dati del ' + new Date(lastOk || Date.now()).toLocaleString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; };
+  const needNet = () => { if (!offline && navigator.onLine) return false; toast('Sei offline: questa azione richiede internet.'); return true; };
   let sset = null;   // saldo di una singola spesa: { c: contatto, rem: centesimi ancora da saldare }
   const C = () => data?.contacts || [], bal = id => data?.bal[id] || 0, cname = id => C().find(c => c.id === id)?.name || '?';
   const eff = id => bal(id) + (data?.pend || []).filter(p => p.key === id).reduce((s, p) => s + p.v, 0);   // saldo al netto dei saldi in attesa
@@ -383,6 +389,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const snapHome = () => {
     if (touching || tab !== 'home' || pk || gk || !dockY || shell.classList.contains('form') || shell.classList.contains('menu') || shell.classList.contains('notif')) return;
     if (document.activeElement?.id === 'hq') return;
+    if (app.querySelector('.sw.open, .sw.drag') || Date.now() - swipedAt < 1200) return;   // non muovere la pagina mentre usi lo swipe
     const y = scrollY; if (y <= 0 || y >= dockY - 1) return;
     scrollTo({ top: y >= 48 ? dockY : 0, behavior: 'smooth' });
   };
@@ -395,7 +402,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     $('#dock').innerHTML = TABS.map(([k, l, i]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${i}${l}</button>`).join('');
     $('#drawer').innerHTML = drawer(); $('#drawer').classList.remove('small'); $('#minibar').innerHTML = miniHTML(); $('#sheet').innerHTML = sheet();
     $('#person').innerHTML = pk && data ? personHTML() : gk && data ? groupHTML() : ''; $('#person').classList.toggle('open', !!(pk || gk));
-    $('#dot').hidden = !data?.notifs.some(n => !n.read_at); if (data) setBadge(); fitHome(); dockSummary();
+    $('#dot').hidden = !data?.notifs.some(n => !n.read_at); if (data) setBadge(); showOff(); fitHome(); dockSummary();
   };
   // Apre la pagina collegata a una notifica (usata dal tocco in app e dal tocco sulla notifica push)
   const openNotif = nid => {
@@ -425,7 +432,11 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       reload();
     } catch { /* ignora: riproverà alla prossima apertura */ }
   };
-  const reload = async (proc) => { if (proc) { try { await supabase.rpc('process_recurring'); } catch { /* ignora */ } } try { data = await loadLedger(user.id); failed = false; } catch { failed = !data; } paint(); tryWant(); cleanReceipts(); };
+  const reload = async (proc) => { if (proc) { try { await supabase.rpc('process_recurring'); } catch { /* ignora */ } } try { data = await loadLedger(user.id); failed = false; offline = false; lastOk = Date.now(); saveSnap(); }
+    catch {
+      if (!data || !navigator.onLine) { const sn = !data ? loadSnap() : null; if (sn) { data = sn.data; lastOk = sn.ts; } offline = !navigator.onLine || !!sn; failed = !data; } else failed = false;
+    }
+    paint(); tryWant(); cleanReceipts(); };
 
   app.onclick = async e => {
     if (Date.now() - swipedAt < 350) return;   // il click che segue uno swipe
@@ -523,6 +534,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       console.warn('send-invite', r);
       toast(r?.sent ? 'Email inviata' : r?.reason === 'already' ? 'Email già inviata.' : r?.reason === 'has_account' ? 'Ha già un account: riceve una notifica.' : 'Email non inviata: ' + (r?.error?.slice(0, 70) || 'errore'));
     } else if (d.a === 'delx' || d.a === 'delc' || d.a === 'delg') {
+      if (needNet()) return;
       if (d.a === 'delx' && fx?.kind !== 's' && fx?.id && settledInfo(fx.id).any) return openForm('delask');
       if (armed !== d.a) { armed = d.a; t.textContent = 'Tocca ancora per confermare'; return; }
       const { error } = d.a === 'delg' ? await supabase.from('groups').delete().eq('id', gk) : d.a === 'delc' ? await supabase.from('contacts').delete().eq('id', pk)
@@ -533,6 +545,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     }
     else if (d.a === 'newx') { xstate = newX(pk ? [pk] : []); openForm('expense'); }
     else if (d.a === 'delhard') {
+      if (needNet()) return;
       const { error } = await supabase.from('expenses').delete().eq('id', fx.id); if (error) return toast('Impossibile eliminare.');
       if (fx.receipt) supabase.storage.from('receipts').remove([fx.receipt]);
       shell.classList.remove('form'); await reload(); toast('Spesa eliminata');
@@ -540,6 +553,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     else if (d.a === 'hmore') { hlim += 50; $('#hlist').innerHTML = homeList(); }
     else if (d.a === 'cform') shell.classList.remove('form');
     else if (d.a === 'swdel') {
+      if (needNet()) return;
       const ex = data.exps.find(x => x.id === d.id); if (ex && settledInfo(ex.id).any) { fx = ex; return openForm('delask'); }
       const { error } = await supabase.from('expenses').delete().eq('id', d.id);
       if (error) return toast('Impossibile eliminare.');
@@ -604,7 +618,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   };
   app.onsubmit = async e => {
     e.preventDefault();
-    const k = e.target.dataset.f, f = Object.fromEntries(new FormData(e.target)), btn = e.target.querySelector('.primary'); if (busy) return; busy = true; btn.disabled = true; let ok = 'Salvato';
+    const k = e.target.dataset.f, f = Object.fromEntries(new FormData(e.target)), btn = e.target.querySelector('.primary'); if (busy) return; if (needNet()) return; busy = true; btn.disabled = true; let ok = 'Salvato';
     try {
       if (k === 'contact') {
         const { error } = await supabase.from('contacts').insert({ name: f.name.trim(), email: f.email.trim() || null, phone: f.phone.trim() || null }); if (error) throw error;
@@ -717,6 +731,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   $('#drawer').addEventListener('scroll', e => { if (e.target.classList?.contains('dbody')) $('#drawer').classList.toggle('small', e.target.scrollTop > 14); }, true);
   document.onkeydown = e => { if (e.key === 'Escape') { shell.classList.remove('menu', 'notif', 'form'); $('#lightbox').classList.remove('show'); } };
   window.ononline = () => reload(true);
+  window.onoffline = () => { offline = true; showOff(); };
   supabase.from('profiles').select('settings').eq('id', user.id).single().then(({ data: p }) => { if (p?.settings) pref = { ...pref, ...p.settings };
     if (p?.settings?.accent) applyAccent(p.settings.accent); });
   const syncChips = () => app.querySelectorAll('.chip input').forEach(i => i.closest('.chip')?.classList.toggle('on', i.checked));   // senza :has()
