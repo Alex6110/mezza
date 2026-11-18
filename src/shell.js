@@ -97,7 +97,7 @@ const swipe = (el, dir, close) => {
 
 export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   let name = user.user_metadata?.name || user.email.split('@')[0];
-  let tab = 'home', data = null, failed = false, q = '', flt = 'all', pk = null, psub = 'due', form = null, tt, fx = null, armed = '', busy = false, pref = { split: 'half' }, xstate = null, gk = null, cflt = 'all', ghostAnim = null, pstate = 'check', pcount = null, swipedAt = 0, hq = '', hper = 'all';
+  let tab = 'home', data = null, failed = false, q = '', flt = 'all', pk = null, psub = 'due', form = null, tt, fx = null, armed = '', busy = false, pref = { split: 'half' }, xstate = null, gk = null, cflt = 'all', ghostAnim = null, pstate = 'check', pcount = null, swipedAt = 0, hq = '', hlim = 50, hper = 'all';
 
   app.innerHTML = `<div class="shell" id="shell">
     <header class="top"><button class="badge" data-a="menu" aria-label="Menu">${esc(name[0].toUpperCase())}</button>
@@ -108,10 +108,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     <section class="sheet" id="sheet"></section><section class="sheet" id="fsheet"></section><div class="toast" id="toast"></div></div>`;
   const $ = s => app.querySelector(s), shell = $('#shell');
   const toast = t => { const e = $('#toast'); e.textContent = t; e.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => e.classList.remove('show'), 2600); };
-  let showHid = false;   // mostra anche le spese nascoste
-  const hid = id => !showHid && !!pref.hidden?.includes(id);
-  const hidLink = () => pref.hidden?.length ? `<button class="link" data-a="tghid">${showHid ? 'Nascondi di nuovo' : `Mostra ${pref.hidden.length} nascoste`}</button>` : '';
-  // quanto di una spesa è già stato saldato: any = almeno in parte, full = del tutto
+    // quanto di una spesa è già stato saldato: any = almeno in parte, full = del tutto
   const settledInfo = id => { let any = false, full = true;
     for (const c of C()) { const its = data.items[c.id] || [], it = its.find(i => i.kind === 'e' && i.id === id); if (!it) continue;
       const o = openItems(its).find(x => x.it.kind === 'e' && x.it.id === id), rem = o ? Math.abs(o.rem) : 0;
@@ -192,16 +189,17 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   // Riga con swipe a sinistra per eliminare (solo le spese create da te)
   const swrap = (html, id, rc) => `<div class="sw can"><button class="sw-act" data-a="swdel" data-id="${id}" data-rc="${esc(rc || '')}" aria-label="Elimina">${I.trash}<span>Elimina</span></button>${html.replace('<div class="row', '<div class="sw-row row')}</div>`;
   const homeRow = x => {
-    const html = `<div class="row tap" data-item="e:${x.id}"><span class="ico">${x.receipt ? I.clip : I.list}</span><span class="grow"><b>${esc(x.title)}</b><br><span class="sub">${dshort(x.date)} · ${eur(x.total)}</span></span>${x.delta ? sg(x.delta) : '<span class="sub">Non coinvolto</span>'}</div>`;
+    const pc = !x.own && x.people[0] && C().some(c => c.id === x.people[0]) ? x.people[0] : '';
+    const html = `<div class="row tap" ${x.own ? `data-item="e:${x.id}"` : pc ? `data-person="${pc}"` : ''}><span class="ico">${x.receipt ? I.clip : I.list}</span><span class="grow"><b>${esc(x.title)}</b><br><span class="sub">${dshort(x.date)} · ${eur(x.total)}</span></span>${x.delta ? sg(x.delta) : '<span class="sub">Non coinvolto</span>'}</div>`;
     return x.own ? swrap(html, x.id, x.receipt) : html;
   };
   const homeList = () => {
     const now = new Date(), pad = n => String(n).padStart(2, '0'), pv = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const cur = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`, prev = `${pv.getFullYear()}-${pad(pv.getMonth() + 1)}`, lim = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
-    const l = data.all.filter(x => !hid(x.id) && (!hq || norm(x.title).includes(norm(hq)) || x.people.some(id => norm(cname(id)).includes(norm(hq))))
+    const l = data.all.filter(x => (!hq || norm(x.title).includes(norm(hq)) || x.people.some(id => norm(cname(id)).includes(norm(hq))))
       && (hper === 'all' || (hper === '7' ? x.date >= lim : x.date.startsWith(hper === 'month' ? cur : prev)))).sort((a, b) => (b.date + b.ts).localeCompare(a.date + a.ts));
-    const shown = hq || hper !== 'all' ? l.slice(0, 60) : l.slice(0, 8);
-    return shown.length ? `<div class="card">${shown.map(homeRow).join('')}</div>${l.length > shown.length ? `<p class="sub more">Altre ${l.length - shown.length} spese: restringi la ricerca</p>` : ''}`
+    const shown = l.slice(0, hlim);
+    return shown.length ? `<div class="card">${shown.map(homeRow).join('')}</div>${l.length > shown.length ? `<button class="btn more-btn" data-a="hmore">Mostra altre ${Math.min(50, l.length - shown.length)} spese</button>` : ''}`
       : `<p class="empty">${hq || hper !== 'all' ? 'Nessuna spesa trovata.' : 'Ancora nessuna spesa condivisa.'}</p>`;
   };
   const clip = p => `<button class="star" data-a="rview" data-path="${esc(p)}" aria-label="Vedi scontrino">${I.clip}</button>`;
@@ -214,7 +212,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   };
   const itemRow = ({ it, rem }, cn) => {
     const v = rem ?? it.v, e = it.kind === 'e';
-    const html = `<div class="row ${it.own || e ? 'tap' : ''}" ${it.own || e ? `data-item="${it.kind}:${it.id}"` : ''}><span class="ico">${e ? I.list : I.check}</span><span class="grow"><b>${e ? esc(it.title) : v > 0 ? 'Hai dato un saldo' : 'Hai ricevuto un saldo'}</b><br>
+    const html = `<div class="row ${it.own ? 'tap' : ''}" ${it.own ? `data-item="${it.kind}:${it.id}"` : ''}><span class="ico">${e ? I.list : I.check}</span><span class="grow"><b>${e ? esc(it.title) : v > 0 ? 'Hai dato un saldo' : 'Hai ricevuto un saldo'}</b><br>
       <span class="sub">${e ? `${it.iPaid ? 'Pagato da te' : 'Pagato da ' + esc(cn)} · ${eur(it.total)}` : esc(it.method || 'Saldo')} · ${dshort(it.date)}</span></span>${e && it.receipt ? clip(it.receipt) : ''}${sg(v)}</div>`;
     return e && it.own ? swrap(html, it.id, it.receipt) : html;
   };
@@ -224,7 +222,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     let body;
     if (psub === 'due') body = b ? `<div class="card">${openItems(its).map(o => itemRow(o, c.name)).join('')}</div>` : '<p class="empty">Tutto in pari.</p>';
     else {
-      const s = [...its].filter(it => !(it.kind === 'e' && hid(it.id))).sort((a, b) => (b.date + b.ts).localeCompare(a.date + a.ts)); let m = '';
+      const s = [...its].sort((a, b) => (b.date + b.ts).localeCompare(a.date + a.ts)); let m = '';
       body = s.length ? s.map(it => {
         const k = new Date(it.date).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
         const h = k !== m ? `${m ? '</div>' : ''}<h2>${k}</h2><div class="card">` : ''; m = k; return h + itemRow({ it }, c.name);
@@ -233,7 +231,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     return `<div class="ptop"><button class="back" data-a="back" aria-label="Indietro">${I.back}</button>${av(c.id, c.name)}<b class="grow">${esc(c.name)}</b><button class="back" data-a="pdf" aria-label="PDF">${I.pdf}</button><button class="back" data-a="editc" aria-label="Modifica contatto">${I.edit}</button></div>
       <section class="hero p"><span>${b > 0 ? 'Ti deve' : b < 0 ? 'Devi dare' : 'Siete in pari'}</span><strong>${eur(Math.abs(b))}</strong></section>
       ${linkHTML(c)}${pendHTML()}<div class="acts"><button class="btn primary" data-a="newx">${I.plus}Nuova spesa</button>${eff(pk) ? `<button class="btn" data-a="settle">${I.check}Salda</button>` : ''}${b > 0 ? `<button class="btn" data-a="remind">${I.send}Sollecita</button>` : ''}</div>
-      ${seg('psub', psub, [['due', 'Da saldare'], ['hist', 'Storico']])}${body}${psub === 'hist' ? hidLink() : ''}`;
+      ${seg('psub', psub, [['due', 'Da saldare'], ['hist', 'Storico']])}${body}`;
   };
 
   const drawer = () => { const t = getTheme(); return `<div class="dhead"><span class="avatar dav">${esc(name[0].toUpperCase())}</span>
@@ -288,7 +286,6 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       ${rbox(x)}
       <p class="sub" id="xsum">${sumHTML()}</p><p class="msg" id="fmsg"></p><button class="btn primary">${edit ? 'Salva modifiche' : 'Salva spesa'}</button></form>
       ${edit ? settleOneHTML() : ''}
-      ${edit && fx?.id && pref.hidden?.includes(fx.id) ? '<button class="btn" data-a="unhidex">Mostra di nuovo nelle liste</button>' : ''}
       ${edit ? '<button class="btn danger-t del" data-a="delx">Elimina spesa</button>' : ''}`;
   };
 
@@ -318,14 +315,8 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     if (form === 'editc') { const c = C().find(x => x.id === pk);
       return f('Modifica contatto', `<input name="name" value="${esc(c.name)}" required maxlength="60"><input name="email" type="email" placeholder="Email" value="${esc(c.email || '')}"><input name="phone" type="tel" placeholder="Telefono" value="${esc(c.phone || '')}">`, 'Salva')
         + '<button class="btn danger-t del" data-a="delc">Elimina contatto</button>'; }
-    if (form === 'viewx') { const si = settledInfo(fx.id), h = !!pref.hidden?.includes(fx.id), k = data.expKey[fx.id], hasC = C().some(c => c.id === k);
-      return `<div class="grab"></div><div class="dform"><h2>${esc(fx.title)}</h2><p class="sub">${dshort(fx.date)} · totale ${eur(fx.total)} · ${si.full ? 'già saldata' : si.any ? 'saldata in parte' : 'ancora da saldare'}</p>
-        ${hasC ? `<button class="btn" data-a="gop" data-c="${k}">Apri la scheda della persona</button>` : ''}
-        ${h ? '<button class="btn primary" data-a="unhidex">Mostra di nuovo nelle liste</button>' : si.full ? '<button class="btn primary" data-a="hidex">Nascondi dalle liste</button>' : '<p class="sub">Potrai nasconderla quando sarà saldata del tutto.</p>'}
-        <button class="btn" data-a="cform">Chiudi</button></div>`; }
     if (form === 'delask') { const si = settledInfo(fx.id);
-      return `<div class="grab"></div><div class="dform"><h2>Eliminare “${esc(fx.title)}”?</h2><p class="sub">Questa spesa è ${si.full ? 'già saldata' : 'saldata in parte'}. ${si.full ? 'Puoi nasconderla: non la vedrai più nelle liste e i conti restano invariati. ' : ''}Se la elimini davvero, i soldi già scambiati restano registrati come saldi e il conto con l’altra persona cambia di conseguenza.</p>
-        ${si.full ? '<button class="btn primary" data-a="hidex">Nascondi (consigliato)</button>' : ''}
+      return `<div class="grab"></div><div class="dform"><h2>Eliminare “${esc(fx.title)}”?</h2><p class="sub">Questa spesa è ${si.full ? 'già saldata' : 'saldata in parte'}. Se la elimini, i soldi già scambiati restano registrati come saldi e il conto con l’altra persona cambia di conseguenza.</p>
         <button class="btn danger-t" data-a="delhard">Elimina definitivamente</button><button class="btn" data-a="cform">Annulla</button></div>`; }
     if (form === 'dels') return `<div class="grab"></div><div class="dform"><h2>Saldo del ${dshort(fx.date)}</h2><p class="sub">${esc(fx.method || 'Saldo')} · ${eur(Math.abs(fx.v))}</p><button class="btn danger-t" data-a="delx">Elimina saldo</button></div>`;
     if (form === 'sets') { const b = sset.rem; return f(`Salda “${esc(fx.title)}”`, `<p class="sub">con ${esc(sset.c.name)} · ${b > 0 ? 'Ti deve' : 'Devi dare'} ${eur(Math.abs(b))} per questa spesa</p><input name="amount" inputmode="decimal" value="${(Math.abs(b) / 100).toFixed(2).replace('.', ',')}" required>
@@ -374,13 +365,32 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     if (!on && scrollY > 48) { if (h && ms) morph(h.getBoundingClientRect(), ms.getBoundingClientRect(), '28px', '18px'); mb.classList.add('show'); pg.classList.add('docked'); }
     else if (on && scrollY < 20) { if (h && ms) morph(ms.getBoundingClientRect(), h.getBoundingClientRect(), '18px', '28px'); mb.classList.remove('show'); pg.classList.remove('docked'); }
   };
-  let raf = 0; window.onscroll = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(dockSummary); };
+  // Home: la pagina deve poter scorrere fino a portare ricerca e periodi sotto il contatore sottile,
+  // e a fine scorrimento si ferma sempre o in alto (contatore grande) o tutta agganciata (mai a metà).
+  let dockY = 0, touching = false, snapT = 0;
+  const fitHome = () => {
+    const pg = $('#page'), hf = pg.querySelector('.hf'), mb = $('#minibar'), tp = document.querySelector('.top');
+    if (tab !== 'home' || !hf || !mb || !tp) { pg.style.minHeight = ''; dockY = 0; return; }
+    document.documentElement.style.setProperty('--mini-h', mb.offsetHeight + 'px');
+    dockY = Math.max(0, Math.round(hf.getBoundingClientRect().top + scrollY - tp.offsetHeight - mb.offsetHeight));
+    pg.style.minHeight = (innerHeight + dockY) + 'px';
+  };
+  const snapHome = () => {
+    if (touching || tab !== 'home' || pk || gk || !dockY || shell.classList.contains('form') || shell.classList.contains('menu') || shell.classList.contains('notif')) return;
+    if (document.activeElement?.id === 'hq') return;
+    const y = scrollY; if (y <= 0 || y >= dockY - 1) return;
+    scrollTo({ top: y >= 48 ? dockY : 0, behavior: 'smooth' });
+  };
+  addEventListener('touchstart', () => { touching = true; }, { passive: true });
+  addEventListener('touchend', () => { touching = false; clearTimeout(snapT); snapT = setTimeout(snapHome, 150); }, { passive: true });
+  addEventListener('resize', fitHome);
+  let raf = 0; window.onscroll = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(dockSummary); clearTimeout(snapT); snapT = setTimeout(snapHome, 160); };
   const paint = () => {
     $('#page').innerHTML = pages[tab]();
     $('#dock').innerHTML = TABS.map(([k, l, i]) => `<button class="${k === tab ? 'on' : ''}" data-tab="${k}">${i}${l}</button>`).join('');
     $('#drawer').innerHTML = drawer(); $('#drawer').classList.remove('small'); $('#minibar').innerHTML = miniHTML(); $('#sheet').innerHTML = sheet();
     $('#person').innerHTML = pk && data ? personHTML() : gk && data ? groupHTML() : ''; $('#person').classList.toggle('open', !!(pk || gk));
-    $('#dot').hidden = !data?.notifs.some(n => !n.read_at); if (data) setBadge(); dockSummary();
+    $('#dot').hidden = !data?.notifs.some(n => !n.read_at); if (data) setBadge(); fitHome(); dockSummary();
   };
   // Apre la pagina collegata a una notifica (usata dal tocco in app e dal tocco sulla notifica push)
   const openNotif = nid => {
@@ -428,9 +438,8 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     else if (d.nid) openNotif(d.nid);
     else if (d.group) { gk = d.group; paint(); }
     else if (d.item) {
-      const [k, id] = d.item.split(':'); fx = (data.items[pk] || []).find(i => i.kind === k && i.id === id) || data.exps.find(i => i.id === id) || data.all.find(i => i.id === id);
+      const [k, id] = d.item.split(':'); fx = (data.items[pk] || []).find(i => i.kind === k && i.id === id) || data.exps.find(i => i.id === id);
       if (k === 's') return openForm('dels');
-      if (fx && !fx.own) return openForm('viewx');   // spesa creata da altri: scheda con la possibilità di nasconderla
       const { data: r } = await supabase.from('expenses').select('id,title,amount_cents,spent_on,payer_contact_id,group_id,receipt_path,expense_shares(contact_id,amount_cents)').eq('id', id).single();
       if (!r) return toast('Impossibile aprire la spesa.');
       const ps = r.expense_shares.filter(x => x.contact_id).map(x => x.contact_id), ids = ['me', ...ps];
@@ -518,24 +527,13 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       shell.classList.remove('form'); if (d.a === 'delc') pk = null; if (d.a === 'delg') gk = null; await reload(); toast('Eliminato');
     }
     else if (d.a === 'newx') { xstate = newX(pk ? [pk] : []); openForm('expense'); }
-    else if (d.a === 'hidex') {
-      pref = { ...pref, hidden: [...new Set([...(pref.hidden || []), fx.id])] };
-      const { error } = await supabase.from('profiles').update({ settings: pref }).eq('id', user.id); if (error) return toast('Impossibile nascondere.');
-      shell.classList.remove('form'); paint(); toast('Spesa nascosta');
-    }
-    else if (d.a === 'unhidex') {
-      pref = { ...pref, hidden: (pref.hidden || []).filter(i => i !== fx.id) };
-      const { error } = await supabase.from('profiles').update({ settings: pref }).eq('id', user.id); if (error) return toast('Operazione non riuscita.');
-      shell.classList.remove('form'); paint(); toast('Spesa di nuovo visibile');
-    }
     else if (d.a === 'delhard') {
       const { error } = await supabase.from('expenses').delete().eq('id', fx.id); if (error) return toast('Impossibile eliminare.');
       if (fx.receipt) supabase.storage.from('receipts').remove([fx.receipt]);
       shell.classList.remove('form'); await reload(); toast('Spesa eliminata');
     }
-    else if (d.a === 'gop') { shell.classList.remove('form'); pk = d.c; psub = 'due'; paint(); }
+    else if (d.a === 'hmore') { hlim += 50; $('#hlist').innerHTML = homeList(); }
     else if (d.a === 'cform') shell.classList.remove('form');
-    else if (d.a === 'tghid') { showHid = !showHid; paint(); }
     else if (d.a === 'swdel') {
       const ex = data.exps.find(x => x.id === d.id); if (ex && settledInfo(ex.id).any) { fx = ex; return openForm('delask'); }
       const { error } = await supabase.from('expenses').delete().eq('id', d.id);
@@ -584,7 +582,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   };
   const inX = el => { const fm = el.closest?.('form[data-f]'); return fm && ['expense', 'editx'].includes(fm.dataset.f) ? fm : null; };
   app.oninput = e => {
-    if (e.target.id === 'hq') { hq = e.target.value; $('#hlist').innerHTML = homeList(); return; }
+    if (e.target.id === 'hq') { hq = e.target.value; hlim = 50; $('#hlist').innerHTML = homeList(); return; }
     if (e.target.id === 'q') { q = e.target.value; $('#list').innerHTML = listHTML(); return; }
     const fm = inX(e.target); if (fm) { readX(fm); $('#xsum').textContent = sumHTML(); }
   };

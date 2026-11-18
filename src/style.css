@@ -260,3 +260,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--primary); outli
 .card > .row, .card > .sw { content-visibility: auto; contain-intrinsic-size: auto 76px; }
 .hero { box-shadow: 0 10px 24px rgba(var(--primary-rgb), 0.3); }
 .sw:not(.open):not(.drag) .sw-act { visibility: hidden; }
+
+
+/* ===== Home: ricerca e periodi agganciati sotto il contatore sottile ===== */
+.hf { position: sticky; top: calc(var(--top-h) + var(--mini-h, 60px)); z-index: 3; margin: 0 -16px 12px; padding: 6px 16px 10px;
+  background: rgba(var(--bg-rgb), 0.8); -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%); }
+.more-btn { display: block; width: 100%; margin-top: 12px; }
+@supports not (backdrop-filter: blur(1px)) { .hf { background: var(--bg); } }
