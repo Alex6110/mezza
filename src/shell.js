@@ -192,8 +192,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   // Riga con swipe a sinistra per eliminare (solo le spese create da te)
   const swrap = (html, id, rc) => `<div class="sw can"><button class="sw-act" data-a="swdel" data-id="${id}" data-rc="${esc(rc || '')}" aria-label="Elimina">${I.trash}<span>Elimina</span></button>${html.replace('<div class="row', '<div class="sw-row row')}</div>`;
   const homeRow = x => {
-    const pc = !x.own && x.people[0] && C().some(c => c.id === x.people[0]) ? x.people[0] : '';
-    const html = `<div class="row tap" ${x.own ? `data-item="e:${x.id}"` : pc ? `data-person="${pc}"` : ''}><span class="ico">${x.receipt ? I.clip : I.list}</span><span class="grow"><b>${esc(x.title)}</b><br><span class="sub">${dshort(x.date)} · ${eur(x.total)}</span></span>${x.delta ? sg(x.delta) : '<span class="sub">Non coinvolto</span>'}</div>`;
+    const html = `<div class="row tap" data-item="e:${x.id}"><span class="ico">${x.receipt ? I.clip : I.list}</span><span class="grow"><b>${esc(x.title)}</b><br><span class="sub">${dshort(x.date)} · ${eur(x.total)}</span></span>${x.delta ? sg(x.delta) : '<span class="sub">Non coinvolto</span>'}</div>`;
     return x.own ? swrap(html, x.id, x.receipt) : html;
   };
   const homeList = () => {
@@ -215,7 +214,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   };
   const itemRow = ({ it, rem }, cn) => {
     const v = rem ?? it.v, e = it.kind === 'e';
-    const html = `<div class="row ${it.own ? 'tap' : ''}" ${it.own ? `data-item="${it.kind}:${it.id}"` : ''}><span class="ico">${e ? I.list : I.check}</span><span class="grow"><b>${e ? esc(it.title) : v > 0 ? 'Hai dato un saldo' : 'Hai ricevuto un saldo'}</b><br>
+    const html = `<div class="row ${it.own || e ? 'tap' : ''}" ${it.own || e ? `data-item="${it.kind}:${it.id}"` : ''}><span class="ico">${e ? I.list : I.check}</span><span class="grow"><b>${e ? esc(it.title) : v > 0 ? 'Hai dato un saldo' : 'Hai ricevuto un saldo'}</b><br>
       <span class="sub">${e ? `${it.iPaid ? 'Pagato da te' : 'Pagato da ' + esc(cn)} · ${eur(it.total)}` : esc(it.method || 'Saldo')} · ${dshort(it.date)}</span></span>${e && it.receipt ? clip(it.receipt) : ''}${sg(v)}</div>`;
     return e && it.own ? swrap(html, it.id, it.receipt) : html;
   };
@@ -319,6 +318,11 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     if (form === 'editc') { const c = C().find(x => x.id === pk);
       return f('Modifica contatto', `<input name="name" value="${esc(c.name)}" required maxlength="60"><input name="email" type="email" placeholder="Email" value="${esc(c.email || '')}"><input name="phone" type="tel" placeholder="Telefono" value="${esc(c.phone || '')}">`, 'Salva')
         + '<button class="btn danger-t del" data-a="delc">Elimina contatto</button>'; }
+    if (form === 'viewx') { const si = settledInfo(fx.id), h = !!pref.hidden?.includes(fx.id), k = data.expKey[fx.id], hasC = C().some(c => c.id === k);
+      return `<div class="grab"></div><div class="dform"><h2>${esc(fx.title)}</h2><p class="sub">${dshort(fx.date)} · totale ${eur(fx.total)} · ${si.full ? 'già saldata' : si.any ? 'saldata in parte' : 'ancora da saldare'}</p>
+        ${hasC ? `<button class="btn" data-a="gop" data-c="${k}">Apri la scheda della persona</button>` : ''}
+        ${h ? '<button class="btn primary" data-a="unhidex">Mostra di nuovo nelle liste</button>' : si.full ? '<button class="btn primary" data-a="hidex">Nascondi dalle liste</button>' : '<p class="sub">Potrai nasconderla quando sarà saldata del tutto.</p>'}
+        <button class="btn" data-a="cform">Chiudi</button></div>`; }
     if (form === 'delask') { const si = settledInfo(fx.id);
       return `<div class="grab"></div><div class="dform"><h2>Eliminare “${esc(fx.title)}”?</h2><p class="sub">Questa spesa è ${si.full ? 'già saldata' : 'saldata in parte'}. ${si.full ? 'Puoi nasconderla: non la vedrai più nelle liste e i conti restano invariati. ' : ''}Se la elimini davvero, i soldi già scambiati restano registrati come saldi e il conto con l’altra persona cambia di conseguenza.</p>
         ${si.full ? '<button class="btn primary" data-a="hidex">Nascondi (consigliato)</button>' : ''}
@@ -328,7 +332,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       <label>Metodo${chips('method', METHODS.map(m => [m, m]), 'Contanti')}</label>`, 'Segna come saldato'); }
     if (form === 'expense' || form === 'editx') return xFormHTML();
     const b = eff(pk);
-    return f(`Salda con ${cn}`, `<p class="sub">${b > 0 ? `Ti deve ${eur(b)}` : `Devi dare ${eur(-b)}`}</p><input name="amount" inputmode="decimal" value="${(Math.abs(b) / 100).toFixed(2).replace('.', ',')}" required>
+    return f(`Salda con ${cn}`, `<p class="sub">${b > 0 ? `Ti deve ${eur(b)}` : `Devi dare ${eur(-b)}`}. Puoi inserire anche una cifra maggiore: la differenza diventa un credito verso di te.</p><input name="amount" inputmode="decimal" value="${(Math.abs(b) / 100).toFixed(2).replace('.', ',')}" required>
       <label>Metodo${chips('method', METHODS.map(m => [m, m]), 'Contanti')}</label>`, 'Segna come saldato');
   };
   const openForm = t => { form = t; armed = ''; $('#fsheet').innerHTML = formHTML(); shell.classList.remove('menu', 'notif'); shell.classList.add('form'); };
@@ -424,8 +428,9 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     else if (d.nid) openNotif(d.nid);
     else if (d.group) { gk = d.group; paint(); }
     else if (d.item) {
-      const [k, id] = d.item.split(':'); fx = (data.items[pk] || []).find(i => i.kind === k && i.id === id) || data.exps.find(i => i.id === id);
+      const [k, id] = d.item.split(':'); fx = (data.items[pk] || []).find(i => i.kind === k && i.id === id) || data.exps.find(i => i.id === id) || data.all.find(i => i.id === id);
       if (k === 's') return openForm('dels');
+      if (fx && !fx.own) return openForm('viewx');   // spesa creata da altri: scheda con la possibilità di nasconderla
       const { data: r } = await supabase.from('expenses').select('id,title,amount_cents,spent_on,payer_contact_id,group_id,receipt_path,expense_shares(contact_id,amount_cents)').eq('id', id).single();
       if (!r) return toast('Impossibile aprire la spesa.');
       const ps = r.expense_shares.filter(x => x.contact_id).map(x => x.contact_id), ids = ['me', ...ps];
@@ -528,6 +533,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       if (fx.receipt) supabase.storage.from('receipts').remove([fx.receipt]);
       shell.classList.remove('form'); await reload(); toast('Spesa eliminata');
     }
+    else if (d.a === 'gop') { shell.classList.remove('form'); pk = d.c; psub = 'due'; paint(); }
     else if (d.a === 'cform') shell.classList.remove('form');
     else if (d.a === 'tghid') { showHid = !showHid; paint(); }
     else if (d.a === 'swdel') {
@@ -669,7 +675,6 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
         const { error } = await supabase.from('settlements').insert({ contact_id: sset.c.id, direction: sset.rem > 0 ? 'received' : 'paid', amount_cents: amt, method: f.method, expense_id: fx.id }); if (error) throw error;
       } else {
         const amt = cents(f.amount); if (!(amt > 0)) throw new Error('Importo non valido.');
-        if (amt > Math.abs(eff(pk))) throw new Error('L’importo supera il saldo da pareggiare.');
         const { error } = await supabase.from('settlements').insert({ contact_id: pk, direction: eff(pk) > 0 ? 'received' : 'paid', amount_cents: amt, method: f.method }); if (error) throw error;
       }
       shell.classList.remove('form'); await reload(); toast(ok);
