@@ -188,15 +188,20 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   };
   // Riga con swipe a sinistra per eliminare (solo le spese create da te)
   const swrap = (html, id, rc) => `<div class="sw can"><button class="sw-act" data-a="swdel" data-id="${id}" data-rc="${esc(rc || '')}" aria-label="Elimina">${I.trash}<span>Elimina</span></button>${html.replace('<div class="row', '<div class="sw-row row')}</div>`;
+  // nomi delle persone coinvolte (massimo 3, poi "+N")
+  const peopleLine = x => { const n = [...new Set((x.people || []).map(cname))].filter(v => v !== '?'); return n.length ? 'con ' + (n.length <= 3 ? n.join(', ') : `${n.slice(0, 2).join(', ')} +${n.length - 2}`) : ''; };
   const homeRow = x => {
+    if (x.kind === 's') return `<div class="row tap" data-person="${x.people[0]}"><span class="ico">${I.check}</span><span class="grow"><b>${x.v > 0 ? 'Hai dato un saldo' : 'Hai ricevuto un saldo'}</b><br><span class="sub">${dshort(x.date)} · ${esc(x.method || 'Saldo')}</span><br><span class="sub who-line">${esc(peopleLine(x))}</span></span>${sg(x.v)}</div>`;
     const pc = !x.own && x.people[0] && C().some(c => c.id === x.people[0]) ? x.people[0] : '';
-    const html = `<div class="row tap" ${x.own ? `data-item="e:${x.id}"` : pc ? `data-person="${pc}"` : ''}><span class="ico">${x.receipt ? I.clip : I.list}</span><span class="grow"><b>${esc(x.title)}</b><br><span class="sub">${dshort(x.date)} · ${eur(x.total)}</span></span>${x.delta ? sg(x.delta) : '<span class="sub">Non coinvolto</span>'}</div>`;
+    const html = `<div class="row tap" ${x.own ? `data-item="e:${x.id}"` : pc ? `data-person="${pc}"` : ''}><span class="ico">${x.receipt ? I.clip : I.list}</span><span class="grow"><b>${esc(x.title)}</b><br><span class="sub">${dshort(x.date)} · ${eur(x.total)}</span>${peopleLine(x) ? `<br><span class="sub who-line">${esc(peopleLine(x))}</span>` : ''}</span>${x.delta ? sg(x.delta) : '<span class="sub">Non coinvolto</span>'}</div>`;
     return x.own ? swrap(html, x.id, x.receipt) : html;
   };
   const homeList = () => {
     const now = new Date(), pad = n => String(n).padStart(2, '0'), pv = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const cur = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`, prev = `${pv.getFullYear()}-${pad(pv.getMonth() + 1)}`, lim = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
-    const l = data.all.filter(x => (!hq || norm(x.title).includes(norm(hq)) || x.people.some(id => norm(cname(id)).includes(norm(hq))))
+    const sets = [];   // anche i saldi compaiono nell'elenco, come nella pagina della persona
+    for (const [k, its] of Object.entries(data.items)) for (const it of its) if (it.kind === 's') sets.push({ kind: 's', id: it.id, title: 'Saldo', date: it.date, ts: it.ts, v: it.v, method: it.method, people: [k] });
+    const l = [...data.all, ...sets].filter(x => (!hq || norm(x.method || '').includes(norm(hq)) || norm(x.title).includes(norm(hq)) || x.people.some(id => norm(cname(id)).includes(norm(hq))))
       && (hper === 'all' || (hper === '7' ? x.date >= lim : x.date.startsWith(hper === 'month' ? cur : prev)))).sort((a, b) => (b.date + b.ts).localeCompare(a.date + a.ts));
     const shown = l.slice(0, hlim);
     return shown.length ? `<div class="card">${shown.map(homeRow).join('')}</div>${l.length > shown.length ? `<button class="btn more-btn" data-a="hmore">Mostra altre ${Math.min(50, l.length - shown.length)} spese</button>` : ''}`
