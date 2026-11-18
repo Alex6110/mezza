@@ -67,13 +67,18 @@ async function pushState() {
   const reg = await swReady(); if (!reg) return 'nosw';
   return (await reg.pushManager.getSubscription()) ? 'on' : 'off';
 }
-// Riduce la foto prima del caricamento (JPEG, lato lungo 1400 px): circa 150-250 KB invece di diversi MB.
-async function shrink(file, max = 1400, q = .72) {
+// Riduce la foto prima del caricamento (JPEG): si prova con qualità decrescente finché pesa meno di ~200 KB.
+async function shrink(file) {
   const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
-  const k = Math.min(1, max / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
-  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
-  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); bmp.close?.();
-  return new Promise((res, rej) => c.toBlob(b => (b ? res(b) : rej(new Error('img'))), 'image/jpeg', q));
+  let out = null;
+  for (const [max, q] of [[1400, .72], [1280, .62], [1100, .55], [1000, .48]]) {
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    out = await new Promise((res, rej) => c.toBlob(b => (b ? res(b) : rej(new Error('img'))), 'image/jpeg', q));
+    if (out.size <= 200 * 1024) break;
+  }
+  bmp.close?.(); return out;
 }
 const save = (txt, fn, type) => { const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([txt], { type })), download: fn }); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
 const swipe = (el, dir, close) => {
@@ -196,7 +201,8 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     const has = !!x.rurl || (x.rpath && !x.rdel);
     return `<div class="rbox"><label class="btn rbtn">${I.clip}${has ? 'Cambia scontrino' : 'Aggiungi scontrino'}<input id="rcpt" name="rcpt" type="file" accept="image/*" hidden></label>
       ${x.rurl ? '<button type="button" class="btn danger-t" data-a="rdel">Rimuovi</button>' : x.rpath && !x.rdel ? `<button type="button" class="btn" data-a="rview" data-path="${esc(x.rpath)}">Vedi</button><button type="button" class="btn danger-t" data-a="rdel">Rimuovi</button>` : ''}
-      ${x.rurl ? `<img class="rimg" src="${x.rurl}" alt="Anteprima scontrino">` : ''}</div>`;
+      ${x.rurl ? `<img class="rimg" src="${x.rurl}" alt="Anteprima scontrino">` : ''}
+      <p class="sub" style="flex-basis:100%;margin:6px 0 0">Lo scontrino si elimina da solo 30 giorni dopo che la spesa è saldata.</p></div>`;
   };
   const itemRow = ({ it, rem }, cn) => {
     const v = rem ?? it.v, e = it.kind === 'e';
@@ -371,7 +377,22 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   if (wantN) history.replaceState(null, '', location.pathname);
   navigator.serviceWorker?.addEventListener('message', e => { if (e.data?.type === 'open-notif') { wantN = e.data.nid; reload().then(() => tryWant()); } });
   const tryWant = () => { if (wantN && data && openNotif(wantN)) wantN = null; };
-  const reload = async (proc) => { if (proc) { try { await supabase.rpc('process_recurring'); } catch { /* ignora */ } } try { data = await loadLedger(user.id); failed = false; } catch { failed = !data; } paint(); tryWant(); };
+  // Pulizia scontrini: elimina quelli delle tue spese interamente saldate da più di 30 giorni (una volta per sessione)
+  let cleaned = false;
+  const cleanReceipts = async () => {
+    if (cleaned || !data) return; cleaned = true;
+    try {
+      const open = new Set();
+      for (const c of C()) for (const o of openItems(data.items[c.id] || [])) if (o.it.kind === 'e') open.add(o.it.id);
+      const lim = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+      const old = data.exps.filter(x => x.receipt && !open.has(x.id) && x.date < lim);
+      if (!old.length) return;
+      const { error } = await supabase.storage.from('receipts').remove(old.map(x => x.receipt)); if (error) return;
+      await supabase.from('expenses').update({ receipt_path: null }).in('id', old.map(x => x.id));
+      reload();
+    } catch { /* ignora: riproverà alla prossima apertura */ }
+  };
+  const reload = async (proc) => { if (proc) { try { await supabase.rpc('process_recurring'); } catch { /* ignora */ } } try { data = await loadLedger(user.id); failed = false; } catch { failed = !data; } paint(); tryWant(); cleanReceipts(); };
 
   app.onclick = async e => {
     if (Date.now() - swipedAt < 350) return;   // il click che segue uno swipe
