@@ -108,6 +108,15 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     <section class="sheet" id="sheet"></section><section class="sheet" id="fsheet"></section><div class="toast" id="toast"></div></div>`;
   const $ = s => app.querySelector(s), shell = $('#shell');
   const toast = t => { const e = $('#toast'); e.textContent = t; e.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => e.classList.remove('show'), 2600); };
+  let showHid = false;   // mostra anche le spese nascoste
+  const hid = id => !showHid && !!pref.hidden?.includes(id);
+  const hidLink = () => pref.hidden?.length ? `<button class="link" data-a="tghid">${showHid ? 'Nascondi di nuovo' : `Mostra ${pref.hidden.length} nascoste`}</button>` : '';
+  // quanto di una spesa è già stato saldato: any = almeno in parte, full = del tutto
+  const settledInfo = id => { let any = false, full = true;
+    for (const c of C()) { const its = data.items[c.id] || [], it = its.find(i => i.kind === 'e' && i.id === id); if (!it) continue;
+      const o = openItems(its).find(x => x.it.kind === 'e' && x.it.id === id), rem = o ? Math.abs(o.rem) : 0;
+      if (Math.abs(it.v) - rem > 0) any = true; if (rem) full = false; }
+    return { any, full }; };
   let sset = null;   // saldo di una singola spesa: { c: contatto, rem: centesimi ancora da saldare }
   const C = () => data?.contacts || [], bal = id => data?.bal[id] || 0, cname = id => C().find(c => c.id === id)?.name || '?';
   const eff = id => bal(id) + (data?.pend || []).filter(p => p.key === id).reduce((s, p) => s + p.v, 0);   // saldo al netto dei saldi in attesa
@@ -190,7 +199,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const homeList = () => {
     const now = new Date(), pad = n => String(n).padStart(2, '0'), pv = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const cur = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`, prev = `${pv.getFullYear()}-${pad(pv.getMonth() + 1)}`, lim = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
-    const l = data.all.filter(x => (!hq || norm(x.title).includes(norm(hq)) || x.people.some(id => norm(cname(id)).includes(norm(hq))))
+    const l = data.all.filter(x => !hid(x.id) && (!hq || norm(x.title).includes(norm(hq)) || x.people.some(id => norm(cname(id)).includes(norm(hq))))
       && (hper === 'all' || (hper === '7' ? x.date >= lim : x.date.startsWith(hper === 'month' ? cur : prev)))).sort((a, b) => (b.date + b.ts).localeCompare(a.date + a.ts));
     const shown = hq || hper !== 'all' ? l.slice(0, 60) : l.slice(0, 8);
     return shown.length ? `<div class="card">${shown.map(homeRow).join('')}</div>${l.length > shown.length ? `<p class="sub more">Altre ${l.length - shown.length} spese: restringi la ricerca</p>` : ''}`
@@ -216,7 +225,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     let body;
     if (psub === 'due') body = b ? `<div class="card">${openItems(its).map(o => itemRow(o, c.name)).join('')}</div>` : '<p class="empty">Tutto in pari.</p>';
     else {
-      const s = [...its].sort((a, b) => (b.date + b.ts).localeCompare(a.date + a.ts)); let m = '';
+      const s = [...its].filter(it => !(it.kind === 'e' && hid(it.id))).sort((a, b) => (b.date + b.ts).localeCompare(a.date + a.ts)); let m = '';
       body = s.length ? s.map(it => {
         const k = new Date(it.date).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
         const h = k !== m ? `${m ? '</div>' : ''}<h2>${k}</h2><div class="card">` : ''; m = k; return h + itemRow({ it }, c.name);
@@ -225,7 +234,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     return `<div class="ptop"><button class="back" data-a="back" aria-label="Indietro">${I.back}</button>${av(c.id, c.name)}<b class="grow">${esc(c.name)}</b><button class="back" data-a="pdf" aria-label="PDF">${I.pdf}</button><button class="back" data-a="editc" aria-label="Modifica contatto">${I.edit}</button></div>
       <section class="hero p"><span>${b > 0 ? 'Ti deve' : b < 0 ? 'Devi dare' : 'Siete in pari'}</span><strong>${eur(Math.abs(b))}</strong></section>
       ${linkHTML(c)}${pendHTML()}<div class="acts"><button class="btn primary" data-a="newx">${I.plus}Nuova spesa</button>${eff(pk) ? `<button class="btn" data-a="settle">${I.check}Salda</button>` : ''}${b > 0 ? `<button class="btn" data-a="remind">${I.send}Sollecita</button>` : ''}</div>
-      ${seg('psub', psub, [['due', 'Da saldare'], ['hist', 'Storico']])}${body}`;
+      ${seg('psub', psub, [['due', 'Da saldare'], ['hist', 'Storico']])}${body}${psub === 'hist' ? hidLink() : ''}`;
   };
 
   const drawer = () => { const t = getTheme(); return `<div class="dhead"><span class="avatar dav">${esc(name[0].toUpperCase())}</span>
@@ -280,6 +289,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       ${rbox(x)}
       <p class="sub" id="xsum">${sumHTML()}</p><p class="msg" id="fmsg"></p><button class="btn primary">${edit ? 'Salva modifiche' : 'Salva spesa'}</button></form>
       ${edit ? settleOneHTML() : ''}
+      ${edit && fx?.id && pref.hidden?.includes(fx.id) ? '<button class="btn" data-a="unhidex">Mostra di nuovo nelle liste</button>' : ''}
       ${edit ? '<button class="btn danger-t del" data-a="delx">Elimina spesa</button>' : ''}`;
   };
 
@@ -309,6 +319,10 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     if (form === 'editc') { const c = C().find(x => x.id === pk);
       return f('Modifica contatto', `<input name="name" value="${esc(c.name)}" required maxlength="60"><input name="email" type="email" placeholder="Email" value="${esc(c.email || '')}"><input name="phone" type="tel" placeholder="Telefono" value="${esc(c.phone || '')}">`, 'Salva')
         + '<button class="btn danger-t del" data-a="delc">Elimina contatto</button>'; }
+    if (form === 'delask') { const si = settledInfo(fx.id);
+      return `<div class="grab"></div><div class="dform"><h2>Eliminare “${esc(fx.title)}”?</h2><p class="sub">Questa spesa è ${si.full ? 'già saldata' : 'saldata in parte'}. ${si.full ? 'Puoi nasconderla: non la vedrai più nelle liste e i conti restano invariati. ' : ''}Se la elimini davvero, i soldi già scambiati restano registrati come saldi e il conto con l’altra persona cambia di conseguenza.</p>
+        ${si.full ? '<button class="btn primary" data-a="hidex">Nascondi (consigliato)</button>' : ''}
+        <button class="btn danger-t" data-a="delhard">Elimina definitivamente</button><button class="btn" data-a="cform">Annulla</button></div>`; }
     if (form === 'dels') return `<div class="grab"></div><div class="dform"><h2>Saldo del ${dshort(fx.date)}</h2><p class="sub">${esc(fx.method || 'Saldo')} · ${eur(Math.abs(fx.v))}</p><button class="btn danger-t" data-a="delx">Elimina saldo</button></div>`;
     if (form === 'sets') { const b = sset.rem; return f(`Salda “${esc(fx.title)}”`, `<p class="sub">con ${esc(sset.c.name)} · ${b > 0 ? 'Ti deve' : 'Devi dare'} ${eur(Math.abs(b))} per questa spesa</p><input name="amount" inputmode="decimal" value="${(Math.abs(b) / 100).toFixed(2).replace('.', ',')}" required>
       <label>Metodo${chips('method', METHODS.map(m => [m, m]), 'Contanti')}</label>`, 'Segna come saldato'); }
@@ -490,6 +504,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       console.warn('send-invite', r);
       toast(r?.sent ? 'Email inviata' : r?.reason === 'already' ? 'Email già inviata.' : r?.reason === 'has_account' ? 'Ha già un account: riceve una notifica.' : 'Email non inviata: ' + (r?.error?.slice(0, 70) || 'errore'));
     } else if (d.a === 'delx' || d.a === 'delc' || d.a === 'delg') {
+      if (d.a === 'delx' && fx?.kind !== 's' && fx?.id && settledInfo(fx.id).any) return openForm('delask');
       if (armed !== d.a) { armed = d.a; t.textContent = 'Tocca ancora per confermare'; return; }
       const { error } = d.a === 'delg' ? await supabase.from('groups').delete().eq('id', gk) : d.a === 'delc' ? await supabase.from('contacts').delete().eq('id', pk)
         : await supabase.from(fx.kind === 's' ? 'settlements' : 'expenses').delete().eq('id', fx.id);
@@ -498,7 +513,25 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       shell.classList.remove('form'); if (d.a === 'delc') pk = null; if (d.a === 'delg') gk = null; await reload(); toast('Eliminato');
     }
     else if (d.a === 'newx') { xstate = newX(pk ? [pk] : []); openForm('expense'); }
+    else if (d.a === 'hidex') {
+      pref = { ...pref, hidden: [...new Set([...(pref.hidden || []), fx.id])] };
+      const { error } = await supabase.from('profiles').update({ settings: pref }).eq('id', user.id); if (error) return toast('Impossibile nascondere.');
+      shell.classList.remove('form'); paint(); toast('Spesa nascosta');
+    }
+    else if (d.a === 'unhidex') {
+      pref = { ...pref, hidden: (pref.hidden || []).filter(i => i !== fx.id) };
+      const { error } = await supabase.from('profiles').update({ settings: pref }).eq('id', user.id); if (error) return toast('Operazione non riuscita.');
+      shell.classList.remove('form'); paint(); toast('Spesa di nuovo visibile');
+    }
+    else if (d.a === 'delhard') {
+      const { error } = await supabase.from('expenses').delete().eq('id', fx.id); if (error) return toast('Impossibile eliminare.');
+      if (fx.receipt) supabase.storage.from('receipts').remove([fx.receipt]);
+      shell.classList.remove('form'); await reload(); toast('Spesa eliminata');
+    }
+    else if (d.a === 'cform') shell.classList.remove('form');
+    else if (d.a === 'tghid') { showHid = !showHid; paint(); }
     else if (d.a === 'swdel') {
+      const ex = data.exps.find(x => x.id === d.id); if (ex && settledInfo(ex.id).any) { fx = ex; return openForm('delask'); }
       const { error } = await supabase.from('expenses').delete().eq('id', d.id);
       if (error) return toast('Impossibile eliminare.');
       if (d.rc) supabase.storage.from('receipts').remove([d.rc]);
