@@ -710,7 +710,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const mv = e => {
     if (!sel) return;
     const dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
-    if (!mode) { if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) { mode = 'h'; sel.classList.add('drag'); } else if (Math.abs(dy) > 8) mode = 'v'; else return; }
+    if (!mode) { if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return; mode = Math.abs(dx) > Math.abs(dy) * .9 ? 'h' : 'v'; if (mode === 'h') sel.classList.add('drag'); }   // tollerante sulle diagonali
     if (mode !== 'h') return;
     e.stopPropagation();   // così non scatta anche il gesto "indietro" della pagina
     const row = sel.querySelector('.sw-row'), base = sel.classList.contains('open') ? -92 : 0;
@@ -721,7 +721,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     if (!sel) return; const r = sel; sel = null; r.removeEventListener('touchmove', mv);
     if (mode !== 'h') return;
     const row = r.querySelector('.sw-row'); row.style.transition = ''; row.style.transform = '';
-    r.classList.toggle('open', r._x < -46 || (r._v < -.5 && r._x < -20)); r.classList.remove('drag'); swipedAt = Date.now(); mode = '';
+    r.classList.toggle('open', r._x < -40 || (r._v < -.35 && r._x < -16)); r.classList.remove('drag'); swipedAt = Date.now(); mode = '';
   };
   app.addEventListener('touchstart', e => {
     const r = e.target.closest('.sw.can'); closeSw(r); sel = r; mode = ''; if (!r) return;
