@@ -408,9 +408,10 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const openNotif = nid => {
     const n = data?.notifs.find(x => x.id === nid); if (!n) return false;
     if (!n.read_at) { n.read_at = 'x'; supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', n.id).then(() => {}); }
-    const k = ['expense_shared', 'expense_updated'].includes(n.type) ? data.expKey[n.data?.expense_id] : n.type === 'settlement_pending' ? data.pend.find(p => !p.own)?.key : null;
+    const fu = n.data?.from_user, byUser = fu ? C().find(c => c.linked_user_id === fu)?.id : null;   // chi ha fatto l'azione
+    const k = ['expense_shared', 'expense_updated'].includes(n.type) ? data.expKey[n.data?.expense_id] : n.type === 'settlement_pending' ? (byUser || data.pend.find(p => !p.own)?.key) : byUser;
     shell.classList.remove('notif', 'menu', 'form'); closeSw?.(null);
-    if (k && C().some(c => c.id === k)) { pk = k; psub = 'due'; } else { pk = null; tab = ['link_accepted', 'account_deleted'].includes(n.type) ? 'contacts' : 'home'; }
+    if (k && C().some(c => c.id === k)) { pk = k; psub = ['expense_deleted', 'settlement_deleted', 'settlement_confirmed'].includes(n.type) ? 'hist' : 'due'; } else { pk = null; tab = ['link_accepted', 'link_request', 'account_deleted'].includes(n.type) ? 'contacts' : 'home'; }
     paint(); return true;
   };
   let wantN = new URLSearchParams(location.search).get('n');   // apertura da notifica push ad app chiusa
@@ -718,15 +719,16 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     row.style.transition = 'none'; row.style.transform = `translateX(${sel._x}px)`;
   };
   const endSw = () => {
-    if (!sel) return; const r = sel; sel = null; r.removeEventListener('touchmove', mv);
-    if (mode !== 'h') return;
+    if (!sel) { mode = ''; return; } const r = sel; sel = null;
+    if (mode !== 'h') { mode = ''; return; }
     const row = r.querySelector('.sw-row'); row.style.transition = ''; row.style.transform = '';
     r.classList.toggle('open', r._x < -40 || (r._v < -.35 && r._x < -16)); r.classList.remove('drag'); swipedAt = Date.now(); mode = '';
   };
   app.addEventListener('touchstart', e => {
     const r = e.target.closest('.sw.can'); closeSw(r); sel = r; mode = ''; if (!r) return;
-    sx = e.touches[0].clientX; sy = e.touches[0].clientY; t0 = performance.now(); r.addEventListener('touchmove', mv, { passive: true });
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY; t0 = performance.now();
   }, { passive: true, capture: true });
+  app.addEventListener('touchmove', mv, { passive: true, capture: true });
   app.addEventListener('touchend', endSw, true); app.addEventListener('touchcancel', endSw, true);
   $('#drawer').addEventListener('scroll', e => { if (e.target.classList?.contains('dbody')) $('#drawer').classList.toggle('small', e.target.scrollTop > 14); }, true);
   document.onkeydown = e => { if (e.key === 'Escape') { shell.classList.remove('menu', 'notif', 'form'); $('#lightbox').classList.remove('show'); } };
