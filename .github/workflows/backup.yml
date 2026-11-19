@@ -1,0 +1,48 @@
+# Backup automatico del database Mezza: ogni notte, cifrato, conservato 30 giorni come "artifact" di GitHub.
+# Segreti da creare in GitHub > Settings > Secrets and variables > Actions:
+#   SUPABASE_DB_URL     stringa di connessione "Session pooler" di Supabase (con la password del database)
+#   BACKUP_PASSPHRASE   una frase lunga a tua scelta: serve per aprire i backup, conservala altrove!
+name: Backup database
+
+on:
+  schedule:
+    - cron: '17 3 * * *'      # ogni notte alle 03:17 UTC
+  workflow_dispatch:           # avvio manuale dal tab Actions
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Installa pg_dump 17
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client-17
+
+      - name: Esporta e cifra
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          D=$(date -u +%F)
+          # dati dell'app (obbligatorio)
+          pg_dump "$DB_URL" --format=custom --no-owner --no-privileges --schema=public --file="mezza-public-$D.dump"
+          # account utenti (facoltativo: se non è consentito, il backup dell'app resta valido)
+          pg_dump "$DB_URL" --format=custom --no-owner --no-privileges --data-only --table=auth.users --table=auth.identities --file="mezza-auth-$D.dump" || echo "auth non esportato"
+          for f in mezza-*.dump; do
+            gpg --batch --yes --pinentry-mode loopback --passphrase "$PASS" --symmetric --cipher-algo AES256 -o "$f.gpg" "$f"
+            rm "$f"
+          done
+          ls -l
+
+      - name: Conserva il backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: mezza-backup-${{ github.run_number }}
+          path: mezza-*.dump.gpg
+          retention-days: 30
+          if-no-files-found: error
