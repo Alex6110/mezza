@@ -240,7 +240,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--primary); outli
 .sw::-webkit-scrollbar { display: none; }
 .card > * + * { border-top: 1px solid var(--border); }
 .sw-act { order: 2; flex: 0 0 92px; width: 92px; scroll-snap-align: end; border: 0; background: var(--danger); color: #fff; display: grid; place-content: center; justify-items: center; gap: 2px; font-size: .76rem; font-weight: 600; cursor: pointer; }
-.sw-row { position: relative; flex: 0 0 100%; min-width: 100%; scroll-snap-align: start; background: var(--card-solid); }
+.sw-row { position: relative; transform: none; transition: none; flex: 0 0 100%; min-width: 100%; scroll-snap-align: start; background: var(--card-solid); }
 .hf { display: grid; gap: 10px; margin: 0 0 12px; } .hf .seg { margin: 0; }
 .hf .seg button { padding: 8px 4px; font-size: .8rem; }
 .more { text-align: center; padding: 10px; }
@@ -257,7 +257,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--primary); outli
 .card, .bell, .search { -webkit-backdrop-filter: none; backdrop-filter: none; }
 .card, .bell, .search { background: var(--card-solid); }
 .drawer, .sheet, .page { will-change: transform; }
-.card > .row, .card > .sw { content-visibility: auto; contain-intrinsic-size: auto 76px; }
+.card > .row { content-visibility: auto; contain-intrinsic-size: auto 76px; }   /* niente content-visibility sulle righe .sw: rovina lo scorrimento orizzontale */
 .hero { box-shadow: 0 10px 24px rgba(var(--primary-rgb), 0.3); }
 
 
