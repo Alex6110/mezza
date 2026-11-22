@@ -194,11 +194,11 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
         <div class="parts">${x.shares.map(h => { const id = h.contact_id ?? 'me'; return `<div class="part"><span>${esc(who(id))}${id === (x.payerC ?? 'me') ? ' · ha pagato' : ''}</span><b>${eur(h.amount_cents)}</b></div>`; }).join('')}</div></div>`).join('') : '<p class="empty">Ancora nessuna spesa nel gruppo.</p>'}`;
   };
   // Riga con swipe a sinistra per eliminare (solo le spese create da te)
-  const swrap = (html, id, rc) => `<div class="sw can"><button class="sw-act" data-a="swdel" data-id="${id}" data-rc="${esc(rc || '')}" aria-label="Elimina">${I.trash}<span>Elimina</span></button>${html.replace('<div class="row', '<div class="sw-row row')}</div>`;
+  const swrap = (html, id, rc, k) => `<div class="sw can"><button class="sw-act" data-a="swdel" data-id="${id}" data-k="${k || 'e'}" data-rc="${esc(rc || '')}" aria-label="Elimina">${I.trash}<span>Elimina</span></button>${html.replace('<div class="row', '<div class="sw-row row')}</div>`;
   // nomi delle persone coinvolte (massimo 3, poi "+N")
   const peopleLine = x => { const n = [...new Set((x.people || []).map(cname))].filter(v => v !== '?'); return n.length ? 'con ' + (n.length <= 3 ? n.join(', ') : `${n.slice(0, 2).join(', ')} +${n.length - 2}`) : ''; };
   const homeRow = x => {
-    if (x.kind === 's') return `<div class="row tap" data-person="${x.people[0]}"><span class="ico">${I.check}</span><span class="grow"><b>${x.v > 0 ? 'Hai dato un saldo' : 'Hai ricevuto un saldo'}</b><br><span class="sub">${dshort(x.date)} · ${esc(x.method || 'Saldo')}</span><br><span class="sub who-line">${esc(peopleLine(x))}</span></span>${sg(x.v)}</div>`;
+    if (x.kind === 's') { const h = `<div class="row tap" data-person="${x.people[0]}"><span class="ico">${I.check}</span><span class="grow"><b>${x.v > 0 ? 'Hai dato un saldo' : 'Hai ricevuto un saldo'}</b><br><span class="sub">${dshort(x.date)} · ${esc(x.method || 'Saldo')}</span><br><span class="sub who-line">${esc(peopleLine(x))}</span></span>${sg(x.v)}</div>`; return x.own ? swrap(h, x.id, '', 's') : h; }
     const pc = !x.own && x.people[0] && C().some(c => c.id === x.people[0]) ? x.people[0] : '';
     const html = `<div class="row tap" ${x.own ? `data-item="e:${x.id}"` : pc ? `data-person="${pc}"` : ''}><span class="ico">${x.receipt ? I.clip : I.list}</span><span class="grow"><b>${esc(x.title)}</b><br><span class="sub">${dshort(x.date)} · ${eur(x.total)}</span>${peopleLine(x) ? `<br><span class="sub who-line">${esc(peopleLine(x))}</span>` : ''}</span>${x.delta ? sg(x.delta) : '<span class="sub">Non coinvolto</span>'}</div>`;
     return x.own ? swrap(html, x.id, x.receipt) : html;
@@ -207,7 +207,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     const now = new Date(), pad = n => String(n).padStart(2, '0'), pv = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const cur = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`, prev = `${pv.getFullYear()}-${pad(pv.getMonth() + 1)}`, lim = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
     const sets = [];   // anche i saldi compaiono nell'elenco, come nella pagina della persona
-    for (const [k, its] of Object.entries(data.items)) for (const it of its) if (it.kind === 's') sets.push({ kind: 's', id: it.id, title: 'Saldo', date: it.date, ts: it.ts, v: it.v, method: it.method, people: [k] });
+    for (const [k, its] of Object.entries(data.items)) for (const it of its) if (it.kind === 's') sets.push({ kind: 's', id: it.id, title: 'Saldo', date: it.date, ts: it.ts, v: it.v, method: it.method, own: it.own, people: [k] });
     const l = [...data.all, ...sets].filter(x => (!hq || norm(x.method || '').includes(norm(hq)) || norm(x.title).includes(norm(hq)) || x.people.some(id => norm(cname(id)).includes(norm(hq))))
       && (hper === 'all' || (hper === '7' ? x.date >= lim : x.date.startsWith(hper === 'month' ? cur : prev)))).sort((a, b) => (b.date + b.ts).localeCompare(a.date + a.ts));
     const shown = l.slice(0, hlim);
@@ -226,7 +226,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     const v = rem ?? it.v, e = it.kind === 'e';
     const html = `<div class="row ${it.own ? 'tap' : ''}" ${it.own ? `data-item="${it.kind}:${it.id}"` : ''}><span class="ico">${e ? I.list : I.check}</span><span class="grow"><b>${e ? esc(it.title) : v > 0 ? 'Hai dato un saldo' : 'Hai ricevuto un saldo'}</b><br>
       <span class="sub">${e ? `${it.iPaid ? 'Pagato da te' : 'Pagato da ' + esc(cn)} · ${eur(it.total)}` : esc(it.method || 'Saldo')} · ${dshort(it.date)}</span></span>${e && it.receipt ? clip(it.receipt) : ''}${sg(v)}</div>`;
-    return e && it.own ? swrap(html, it.id, it.receipt) : html;
+    return (e || it.kind === 's') && it.own ? swrap(html, it.id, it.receipt, it.kind) : html;
   };
   const personHTML = () => {
     const c = C().find(x => x.id === pk); if (!c) return '';
@@ -556,6 +556,11 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     else if (d.a === 'cform') shell.classList.remove('form');
     else if (d.a === 'swdel') {
       if (needNet()) return;
+      if (d.k === 's') {   // saldo creato da me
+        const { error } = await supabase.from('settlements').delete().eq('id', d.id);
+        if (error) return toast('Impossibile eliminare.');
+        await reload(); return toast('Saldo eliminato');
+      }
       const ex = data.exps.find(x => x.id === d.id); if (ex && settledInfo(ex.id).any) { fx = ex; return openForm('delask'); }
       const { error } = await supabase.from('expenses').delete().eq('id', d.id);
       if (error) return toast('Impossibile eliminare.');
@@ -710,7 +715,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   // Swipe sulle righe: scorrimento orizzontale nativo del browser (CSS scroll-snap), niente gesti calcolati a mano.
   const closeSw = except => { if (openSw && openSw !== except) { openSw.scrollTo({ left: 0, behavior: 'smooth' }); } };
   app.addEventListener('touchstart', e => closeSw(e.target.closest('.sw.can')), { passive: true, capture: true });
-  app.addEventListener('scroll', e => { const t = e.target; if (!t.classList?.contains('sw')) return; swipedAt = Date.now(); openSw = t.scrollLeft > 4 ? t : (openSw === t ? null : openSw); }, { passive: true, capture: true });
+  app.addEventListener('scroll', e => { const t = e.target; if (!t.classList?.contains('sw')) return; swipedAt = Date.now(); t.classList.toggle('peek', t.scrollLeft > 1); openSw = t.scrollLeft > 4 ? t : (openSw === t ? null : openSw); }, { passive: true, capture: true });
   $('#drawer').addEventListener('scroll', e => { if (e.target.classList?.contains('dbody')) $('#drawer').classList.toggle('small', e.target.scrollTop > 14); }, true);
   document.onkeydown = e => { if (e.key === 'Escape') { shell.classList.remove('menu', 'notif', 'form'); $('#lightbox').classList.remove('show'); } };
   window.ononline = () => reload(true);
