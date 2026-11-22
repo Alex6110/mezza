@@ -120,6 +120,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const loadSnap = () => { try { const x = JSON.parse(localStorage.getItem(SNAP)); return x?.data ? { ts: x.ts, data: { ...x.data, reg: new Set(x.data.reg), sent: new Map(x.data.sent) } } : null; } catch { return null; } };
   const showOff = () => { const o = $('#offbar'); if (!o) return; o.hidden = !offline; o.textContent = offline ? 'Sei offline · dati del ' + new Date(lastOk || Date.now()).toLocaleString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; };
   const needNet = () => { if (!offline && navigator.onLine) return false; toast('Sei offline: questa azione richiede internet.'); return true; };
+  let openSw = null;   // riga con il pulsante Elimina scoperto
   let sset = null;   // saldo di una singola spesa: { c: contatto, rem: centesimi ancora da saldare }
   const C = () => data?.contacts || [], bal = id => data?.bal[id] || 0, cname = id => C().find(c => c.id === id)?.name || '?';
   const eff = id => bal(id) + (data?.pend || []).filter(p => p.key === id).reduce((s, p) => s + p.v, 0);   // saldo al netto dei saldi in attesa
@@ -389,7 +390,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const snapHome = () => {
     if (touching || tab !== 'home' || pk || gk || !dockY || shell.classList.contains('form') || shell.classList.contains('menu') || shell.classList.contains('notif')) return;
     if (document.activeElement?.id === 'hq') return;
-    if (app.querySelector('.sw.open, .sw.drag') || Date.now() - swipedAt < 1200) return;   // non muovere la pagina mentre usi lo swipe
+    if (openSw || Date.now() - swipedAt < 1200) return;   // non muovere la pagina mentre usi lo swipe
     const y = scrollY; if (y <= 0 || y >= dockY - 1) return;
     scrollTo({ top: y >= 48 ? dockY : 0, behavior: 'smooth' });
   };
@@ -442,7 +443,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   app.onclick = async e => {
     if (Date.now() - swipedAt < 350) return;   // il click che segue uno swipe
     const op = e.target.closest('.sw-row');
-    if (op && op.parentElement.classList.contains('open')) { op.parentElement.classList.remove('open'); return; }
+    if (op && op.parentElement.scrollLeft > 20) { op.parentElement.scrollTo({ left: 0, behavior: 'smooth' }); return; }
     const t = e.target.closest('[data-a],[data-tab],[data-theme-set],[data-person],[data-flt],[data-cflt],[data-hper],[data-psub],[data-item],[data-nid],[data-group]'), d = t?.dataset;
     if (!t) return;
     if (d.tab) { tab = d.tab; q = ''; flt = 'all'; cflt = 'all'; paint(); scrollTo(0, 0); const p = $('#page'); p.classList.remove('rise'); void p.offsetWidth; p.classList.add('rise'); }
@@ -706,30 +707,10 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   swipe($('#fsheet'), 'down', () => shell.classList.remove('form'));
   swipe($('#person'), 'right', closePerson);
   // swipe a sinistra sulle righe eliminabili (in fase di cattura, così non scatta anche il gesto di chiusura della pagina)
-  let sx = 0, sy = 0, sel = null, mode = '', t0 = 0;
-  const closeSw = except => app.querySelectorAll('.sw.open').forEach(x => { if (x !== except) x.classList.remove('open'); });
-  const mv = e => {
-    if (!sel) return;
-    const dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
-    if (!mode) { if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return; mode = Math.abs(dx) > Math.abs(dy) * .9 ? 'h' : 'v'; if (mode === 'h') sel.classList.add('drag'); }   // tollerante sulle diagonali
-    if (mode !== 'h') return;
-    e.stopPropagation();   // così non scatta anche il gesto "indietro" della pagina
-    const row = sel.querySelector('.sw-row'), base = sel.classList.contains('open') ? -92 : 0;
-    sel._x = Math.max(-110, Math.min(0, base + dx)); sel._v = (sel._x - base) / Math.max(1, performance.now() - t0);
-    row.style.transition = 'none'; row.style.transform = `translateX(${sel._x}px)`;
-  };
-  const endSw = () => {
-    if (!sel) { mode = ''; return; } const r = sel; sel = null;
-    if (mode !== 'h') { mode = ''; return; }
-    const row = r.querySelector('.sw-row'); row.style.transition = ''; row.style.transform = '';
-    r.classList.toggle('open', r._x < -40 || (r._v < -.35 && r._x < -16)); r.classList.remove('drag'); swipedAt = Date.now(); mode = '';
-  };
-  app.addEventListener('touchstart', e => {
-    const r = e.target.closest('.sw.can'); closeSw(r); sel = r; mode = ''; if (!r) return;
-    sx = e.touches[0].clientX; sy = e.touches[0].clientY; t0 = performance.now();
-  }, { passive: true, capture: true });
-  app.addEventListener('touchmove', mv, { passive: true, capture: true });
-  app.addEventListener('touchend', endSw, true); app.addEventListener('touchcancel', endSw, true);
+  // Swipe sulle righe: scorrimento orizzontale nativo del browser (CSS scroll-snap), niente gesti calcolati a mano.
+  const closeSw = except => { if (openSw && openSw !== except) { openSw.scrollTo({ left: 0, behavior: 'smooth' }); } };
+  app.addEventListener('touchstart', e => closeSw(e.target.closest('.sw.can')), { passive: true, capture: true });
+  app.addEventListener('scroll', e => { const t = e.target; if (!t.classList?.contains('sw')) return; swipedAt = Date.now(); openSw = t.scrollLeft > 4 ? t : (openSw === t ? null : openSw); }, { passive: true, capture: true });
   $('#drawer').addEventListener('scroll', e => { if (e.target.classList?.contains('dbody')) $('#drawer').classList.toggle('small', e.target.scrollTop > 14); }, true);
   document.onkeydown = e => { if (e.key === 'Escape') { shell.classList.remove('menu', 'notif', 'form'); $('#lightbox').classList.remove('show'); } };
   window.ononline = () => reload(true);
