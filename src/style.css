@@ -236,11 +236,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--primary); outli
 :root { --card-solid: #fbfdfc; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --card-solid: #16211f; } }
 :root[data-theme="dark"] { --card-solid: #16211f; }
-.sw { position: relative; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-.sw::-webkit-scrollbar { display: none; }
+.sw { position: relative; overflow: hidden; }
 .card > * + * { border-top: 1px solid var(--border); }
-.sw-act { order: 2; flex: 0 0 92px; width: 92px; scroll-snap-align: end; border: 0; background: var(--danger); color: #fff; display: grid; place-content: center; justify-items: center; gap: 2px; font-size: .76rem; font-weight: 600; cursor: pointer; }
-.sw-row { position: relative; transform: none; transition: none; flex: 0 0 100%; min-width: 100%; scroll-snap-align: start; background: var(--card-solid); }
+.sw-act { position: absolute; top: 0; right: 0; bottom: 0; width: 92px; border: 0; background: var(--danger); color: #fff; display: grid; place-content: center; justify-items: center; gap: 2px; font-size: .76rem; font-weight: 600; cursor: pointer; }
+.sw-row { position: relative; background: var(--card-solid); transition: transform .26s cubic-bezier(.2,.8,.2,1); touch-action: pan-y; }
+.sw.open .sw-row { transform: translateX(-92px); }
 .hf { display: grid; gap: 10px; margin: 0 0 12px; } .hf .seg { margin: 0; }
 .hf .seg button { padding: 8px 4px; font-size: .8rem; }
 .more { text-align: center; padding: 10px; }
@@ -257,8 +257,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--primary); outli
 .card, .bell, .search { -webkit-backdrop-filter: none; backdrop-filter: none; }
 .card, .bell, .search { background: var(--card-solid); }
 .drawer, .sheet, .page { will-change: transform; }
-.card > .row { content-visibility: auto; contain-intrinsic-size: auto 76px; }   /* niente content-visibility sulle righe .sw: rovina lo scorrimento orizzontale */
+.card > .row, .card > .sw { content-visibility: auto; contain-intrinsic-size: auto 76px; }
 .hero { box-shadow: 0 10px 24px rgba(var(--primary-rgb), 0.3); }
+.sw:not(.open):not(.drag) .sw-act { visibility: hidden; }
 
 
 /* ===== Home: ricerca e periodi agganciati sotto il contatore sottile ===== */
