@@ -102,7 +102,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   app.innerHTML = `<div class="shell" id="shell">
     <header class="top"><button class="badge" data-a="menu" aria-label="Menu">${esc(name[0].toUpperCase())}</button>
       <b class="appname">${APP_NAME}</b><button class="bell" data-a="notif" aria-label="Notifiche">${I.bell}<span class="dot" id="dot" hidden></span></button></header>
-    <main id="page"></main><div class="minibar" id="minibar"></div><div class="offbar" id="offbar" hidden></div><div class="ghost" id="ghost"></div><div class="lightbox" id="lightbox" data-a="lbclose"></div><nav class="dock" id="dock"></nav>
+    <main id="page"></main><div class="minibar" id="minibar"></div><div class="offbar" id="offbar" hidden></div><div class="ghost" id="ghost"></div><div class="lightbox" id="lightbox" data-a="lbclose"></div><nav class="dock" id="dock"></nav><section class="install" id="install" hidden></section>
     <section class="page" id="person"></section>
     <div class="scrim" data-a="close"></div><aside class="drawer" id="drawer"></aside>
     <section class="sheet" id="sheet"></section><section class="sheet" id="fsheet"></section><div class="toast" id="toast"></div></div>`;
@@ -120,6 +120,18 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   const loadSnap = () => { try { const x = JSON.parse(localStorage.getItem(SNAP)); return x?.data ? { ts: x.ts, data: { ...x.data, reg: new Set(x.data.reg), sent: new Map(x.data.sent) } } : null; } catch { return null; } };
   const showOff = () => { const o = $('#offbar'); if (!o) return; o.hidden = !offline; o.textContent = offline ? 'Sei offline · dati del ' + new Date(lastOk || Date.now()).toLocaleString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; };
   const needNet = () => { if (!offline && navigator.onLine) return false; toast('Sei offline: questa azione richiede internet.'); return true; };
+  // ----- Installazione come app (iPhone: Aggiungi alla schermata Home; Chrome/Android: pulsante Installa) -----
+  const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const canInstall = () => !isStandalone() && (isIOS || !!window.__mezzaInstall);
+  const shareIcon = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg>';
+  const installHTML = () => isIOS
+    ? `<b>Installa Mezza sul tuo iPhone</b><p class="sub">Così si apre a schermo intero e puoi ricevere le notifiche (da Safari non funzionano).</p>
+       <ol class="inst-steps"><li>Tocca <span class="inst-ic">${shareIcon}</span> <b>Condividi</b> nella barra di Safari</li><li>Scegli <b>Aggiungi alla schermata Home</b></li><li>Apri Mezza dall’icona che compare</li></ol>
+       <div class="acts"><button class="btn primary" data-a="instok">Ho capito</button></div>`
+    : `<b>Installa Mezza</b><p class="sub">Si apre come un’app a sé, anche dal computer, e puoi ricevere le notifiche.</p>
+       <div class="acts"><button class="btn primary" data-a="instgo">Installa</button><button class="btn" data-a="instok">Non ora</button></div>`;
+  const showInstall = force => { const el = $('#install'); if (!el || !canInstall()) return; if (!force && localStorage.getItem('mezza-install-off')) return; el.innerHTML = installHTML(); el.hidden = false; };
   let openSw = null;   // riga con il pulsante Elimina scoperto
   let sset = null;   // saldo di una singola spesa: { c: contatto, rem: centesimi ancora da saldare }
   const C = () => data?.contacts || [], bal = id => data?.bal[id] || 0, cname = id => C().find(c => c.id === id)?.name || '?';
@@ -251,7 +263,7 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
     <div class="dbody"><h3>Aspetto</h3>${seg('theme-set', t, [['system', 'Sistema'], ['light', 'Chiaro'], ['dark', 'Scuro']])}
       <h3>Impostazioni</h3><div class="card">${[['prof', 'Profilo', I.users], ['prefs', 'Preferenze', I.list], ['rec', 'Spese ricorrenti', I.repeat], ['push', 'Notifiche push', I.bell], ['pwd', 'Password', I.edit], ['mail', 'Email', I.send], ['data', 'Dati e account', I.pdf]]
         .map(([k, l, i]) => `<button class="row" data-a="set:${k}">${i}<span class="grow">${l}</span></button>`).join('')}</div>
-      <a class="sub plink" href="/privacy.html" target="_blank" rel="noopener">Informativa privacy</a><button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · v0.9</p></div>`; };
+      ${canInstall() ? `<div class="card" style="margin-top:12px"><button class="row" data-a="insthow">${I.plus}<span class="grow">Installa l’app</span></button></div>` : ''}<button class="btn danger-t" data-a="out">Esci</button><p class="sub ver">${APP_NAME} · v0.9</p></div>`; };
   const sheet = () => `<div class="grab"></div><div class="sheet-h"><h2>Notifiche</h2>${data?.notifs.some(n => !n.read_at) ? '<button class="link" data-a="readall">Segna come lette</button>' : ''}</div>
     ${data?.notifs.length ? data.notifs.map(n => `<div class="row tap" data-nid="${n.id}"><span class="grow"><b>${esc(n.title)}</b>${n.body ? `<br><span class="sub">${esc(n.body)}</span>` : ''}</span>${n.read_at ? '' : '<span class="dot s"></span>'}</div>`).join('') : '<p class="empty">Nessuna notifica.</p>'}`;
 
@@ -553,6 +565,9 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
       shell.classList.remove('form'); await reload(); toast('Spesa eliminata');
     }
     else if (d.a === 'hmore') { hlim += 50; $('#hlist').innerHTML = homeList(); }
+    else if (d.a === 'instok') { try { localStorage.setItem('mezza-install-off', '1'); } catch { /* ignora */ } $('#install').hidden = true; }
+    else if (d.a === 'insthow') { shell.classList.remove('menu'); showInstall(true); }
+    else if (d.a === 'instgo') { const ip = window.__mezzaInstall; if (ip) { ip.prompt(); try { await ip.userChoice; } catch { /* ignora */ } window.__mezzaInstall = null; } $('#install').hidden = true; }
     else if (d.a === 'cform') shell.classList.remove('form');
     else if (d.a === 'swdel') {
       if (needNet()) return;
@@ -718,6 +733,8 @@ export function mountShell(app, user, { applyTheme, getTheme, logout }) {
   app.addEventListener('scroll', e => { const t = e.target; if (!t.classList?.contains('sw')) return; swipedAt = Date.now(); t.classList.toggle('peek', t.scrollLeft > 1); openSw = t.scrollLeft > 4 ? t : (openSw === t ? null : openSw); }, { passive: true, capture: true });
   $('#drawer').addEventListener('scroll', e => { if (e.target.classList?.contains('dbody')) $('#drawer').classList.toggle('small', e.target.scrollTop > 14); }, true);
   document.onkeydown = e => { if (e.key === 'Escape') { shell.classList.remove('menu', 'notif', 'form'); $('#lightbox').classList.remove('show'); } };
+  window.addEventListener('mezza-install-ready', () => showInstall());
+  setTimeout(() => showInstall(), 2500);
   window.ononline = () => reload(true);
   window.onoffline = () => { offline = true; showOff(); };
   supabase.from('profiles').select('settings').eq('id', user.id).single().then(({ data: p }) => { if (p?.settings) pref = { ...pref, ...p.settings };

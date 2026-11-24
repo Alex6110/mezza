@@ -4,6 +4,10 @@ import { APP_NAME } from './config.js';
 import { mountShell } from './shell.js';
 import { applyAccent } from './accent.js';
 
+// Il browser (Chrome/Android) avvisa quando l'app è installabile: conserviamo l'evento per il pulsante "Installa".
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); window.__mezzaInstall = e; window.dispatchEvent(new Event('mezza-install-ready')); });
+window.addEventListener('appinstalled', () => { window.__mezzaInstall = null; });
+
 const app = document.getElementById('app');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const logo = `<svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#0b7f73"/><circle cx="256" cy="256" r="130" fill="none" stroke="#fff" stroke-width="28"/><path d="M256 126a130 130 0 0 1 0 260z" fill="#fff"/></svg>`;
