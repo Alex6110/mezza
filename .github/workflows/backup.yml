@@ -13,6 +13,14 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Tieni sveglio il progetto Supabase (i progetti gratuiti si fermano dopo una settimana senza attività)
+        run: |
+          URL=$(grep -oP "SUPABASE_URL = '\K[^']+" src/config.js)
+          KEY=$(grep -oP "SUPABASE_ANON_KEY = '\K[^']+" src/config.js)
+          curl -sS -o /dev/null -w "risposta: %{http_code}\n" "$URL/rest/v1/profiles?select=id&limit=1" -H "apikey: $KEY" || true
+
       - name: Installa pg_dump 17
         run: |
           sudo install -d /usr/share/postgresql-common/pgdg
